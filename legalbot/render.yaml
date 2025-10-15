@@ -1,12 +1,17 @@
 services:
+  # ===========================
+  # 🚀 Backend Service
+  # ===========================
   - type: web
     name: legalbot-backend
     env: docker
     plan: free
-    dockerfilePath: ./Dockerfile.backend
+    dockerfilePath: ./legalbot/backend/Dockerfile
     envVars:
       - key: FRONTEND_URL
         value: https://legalbot-frontend.onrender.com
+
+      # Database Connection
       - key: POSTGRES_HOST
         fromService:
           name: legalbot-db
@@ -18,18 +23,47 @@ services:
         value: postgres
       - key: POSTGRES_PASSWORD
         value: Google@123
+
+      # LLM and API keys
       - key: OPENAI_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
 
+      # JWT / Misc backend configs
+      - key: JWT_SECRET_KEY
+        value: supersecretkey123
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRATION_MINUTES
+        value: "60"
+
+      # Optional — Mongo (if used)
+      - key: MONGO_URI
+        value: mongodb://mongo:27017/
+      - key: MONGO_DB
+        value: document_db
+
+    # Health check to confirm backend is live
+    healthCheckPath: /api/v1/health/
+    autoDeploy: true
+
+  # ===========================
+  # 💻 Frontend Service
+  # ===========================
   - type: web
     name: legalbot-frontend
     env: docker
     plan: free
-    dockerfilePath: ./Dockerfile.frontend
+    dockerfilePath: ./legalbot/web/Dockerfile.frontend
     envVars:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1
+    autoDeploy: true
 
+  # ===========================
+  # 🗄️ Postgres Database
+  # ===========================
   - type: pserv
     name: legalbot-db
     env: docker

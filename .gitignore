@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+env/
+venv/
+
+# Environment files
+*.env
+*.env.*
+!.env.example
+
+# Node & frontend
+node_modules/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs & history
+chat_history.csv
+*.log
+
+# Docker volumes
+volumes/
+postgres_data/

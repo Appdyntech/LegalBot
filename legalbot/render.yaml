@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: legalbot-backend
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.backend
+    envVars:
+      - key: FRONTEND_URL
+        value: https://legalbot-frontend.onrender.com
+      - key: POSTGRES_HOST
+        fromService:
+          name: legalbot-db
+          type: pserv
+          property: host
+      - key: POSTGRES_DB
+        value: legal_chunks_db
+      - key: POSTGRES_USER
+        value: postgres
+      - key: POSTGRES_PASSWORD
+        value: Google@123
+      - key: OPENAI_API_KEY
+        sync: false
+
+  - type: web
+    name: legalbot-frontend
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.frontend
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://legalbot-backend.onrender.com/api/v1
+
+  - type: pserv
+    name: legalbot-db
+    env: docker
+    dockerCommand: postgres
+    plan: free
+    envVars:
+      - key: POSTGRES_USER
+        value: postgres
+      - key: POSTGRES_PASSWORD
+        value: Google@123
+      - key: POSTGRES_DB
+        value: legal_chunks_db

@@ -1,0 +1,40 @@
+# remove the "version" line at the top
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: legalbot_backend
+    ports:
+      - "8705:8705"
+    env_file:
+      - ./backend/.env.dev    # ✅ fixed path
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: legalbot_frontend
+    ports:
+      - "8602:8602"
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15
+    container_name: legalbot_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Google@123
+      POSTGRES_DB: legal_chunks_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:

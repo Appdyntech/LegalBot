@@ -1,0 +1,11 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY web /app
+
+# Clean install and build
+RUN npm install --legacy-peer-deps && npm run build
+
+EXPOSE 8602
+CMD ["npm", "run", "dev", "--", "--host"]

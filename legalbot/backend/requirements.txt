@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pymongo
+psycopg2-binary
+openai
+rapidfuzz
+twilio
+pandas
+python-multipart
+# Python deps

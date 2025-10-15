@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy your backend directly (not "legalbot/backend")
+COPY backend /app
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir fastapi uvicorn psycopg2-binary pymongo requests python-dotenv
+
+EXPOSE 8705
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]

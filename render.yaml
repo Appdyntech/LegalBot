@@ -22,7 +22,7 @@ services:
       - key: POSTGRES_USER
         value: postgres
       - key: POSTGRES_PASSWORD
-        sync: false   # hide from public YAML
+        sync: false
 
       # LLM and API keys
       - key: OPENAI_API_KEY
@@ -53,8 +53,8 @@ services:
   - type: web
     name: legalbot-frontend
     env: docker
-    rootDir: legalbot/web               # ✅ build context
-    dockerfilePath: ./Dockerfile.frontend   # ✅ relative to rootDir
+    rootDir: legalbot/web          # ✅ Render builds from inside this folder
+    dockerfilePath: ./Dockerfile.frontend   # ✅ relative to that folder (not full path)
     plan: free
     envVars:
       - key: VITE_API_BASE_URL
@@ -71,6 +71,6 @@ services:
       - key: POSTGRES_USER
         value: postgres
       - key: POSTGRES_PASSWORD
-        sync: false   # stored securely
+        sync: false
       - key: POSTGRES_DB
         value: legal_chunks_db

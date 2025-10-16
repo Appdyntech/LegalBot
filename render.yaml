@@ -49,6 +49,7 @@ services:
         sync: false
 
     healthCheckPath: /api/v1/health/
+    autoDeploy: true
 
   # ===========================
   # 💻 Frontend (Vite / React)
@@ -62,3 +63,4 @@ services:
     envVars:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1
+    healthCheckPath: /

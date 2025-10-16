@@ -1,11 +1,18 @@
-FROM node:20-alpine
+# Frontend Dockerfile
+FROM node:20-alpine AS build
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
-COPY web /app
+# Install dependencies
+COPY web/package*.json ./
+RUN npm install
 
-# Clean install and build
-RUN npm install --legacy-peer-deps && npm run build
+# Copy and build frontend
+COPY . /app
+RUN npm run build
 
-EXPOSE 8602
-CMD ["npm", "run", "dev", "--", "--host"]
+# Serve static build with Nginx
+FROM nginx:1.25-alpine
+COPY --from=build /usr/src/app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

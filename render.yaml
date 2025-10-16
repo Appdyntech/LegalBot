@@ -1,33 +1,32 @@
 services:
   # ===========================
-  # 🚀 Backend Service
+  # 🚀 Backend (FastAPI)
   # ===========================
   - type: web
     name: legalbot-backend
     env: docker
     plan: free
     dockerfilePath: ./legalbot/backend/Dockerfile.backend
+    autoDeploy: true
     envVars:
-      - key: FRONTEND_URL
-        value: https://legalbot-frontend.onrender.com
-
+      # Database connection (linked to managed Postgres)
       - key: POSTGRES_HOST
         fromService:
-          name: legalbot-db
           type: postgres
+          name: legalbot-db
           property: host
+      - key: POSTGRES_PORT
+        value: "5432"
       - key: POSTGRES_DB
         value: legal_chunks_db
       - key: POSTGRES_USER
         value: postgres
       - key: POSTGRES_PASSWORD
-        sync: false
+        sync: false   # entered securely in Render UI
 
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-
+      # Core backend settings
+      - key: FRONTEND_URL
+        value: https://legalbot-frontend.onrender.com
       - key: JWT_SECRET_KEY
         value: supersecretkey123
       - key: JWT_ALGORITHM
@@ -35,29 +34,35 @@ services:
       - key: JWT_EXPIRATION_MINUTES
         value: "60"
 
+      # MongoDB (optional)
       - key: MONGO_URI
-        value: mongodb://mongo:27017/
+        value: mongodb+srv://<user>:<pass>@cluster0.y52ne8i.mongodb.net/?retryWrites=true&w=majority
       - key: MONGO_DB
         value: document_db
 
+      # OpenAI & Anthropic keys (set via Render Dashboard)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
     healthCheckPath: /api/v1/health/
-    autoDeploy: true
 
   # ===========================
-  # 💻 Frontend Service
+  # 💻 Frontend (Vite / React)
   # ===========================
   - type: web
     name: legalbot-frontend
     env: docker
     plan: free
-    dockerfilePath: ./Dockerfile.frontend   # <-- now lives in repo root, not inside /web
+    dockerfilePath: ./legalbot/web/Dockerfile.frontend
+    autoDeploy: true
     envVars:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1
-    autoDeploy: true
 
   # ===========================
-  # 🗄️ PostgreSQL Database
+  # 🗄️ PostgreSQL (Managed)
   # ===========================
   - type: postgres
     name: legalbot-db
@@ -65,7 +70,7 @@ services:
     envVars:
       - key: POSTGRES_USER
         value: postgres
-      - key: POSTGRES_PASSWORD
-        sync: false
       - key: POSTGRES_DB
         value: legal_chunks_db
+      - key: POSTGRES_PASSWORD
+        sync: false   # set securely in Render Dashboard

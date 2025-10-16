@@ -31,3 +31,7 @@ chat_history.csv
 # Docker volumes
 volumes/
 postgres_data/
+# Never commit secrets
+*.env
+.env
+legalbot/backend/.env

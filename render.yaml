@@ -62,11 +62,3 @@ services:
     envVars:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1
-
-  # ===========================
-  # 🗄️ PostgreSQL (Managed)
-  # ===========================
-  - type: database
-    name: legalbot-db
-    databaseName: legal_chunks_db
-    plan: free

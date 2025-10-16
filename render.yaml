@@ -10,22 +10,29 @@ services:
     autoDeploy: true
 
     envVars:
-      # Database connection (linked to private service)
+      # Database connection (linked to Render managed Postgres)
       - key: POSTGRES_HOST
-        fromService:
-          type: pserv
+        fromDatabase:
           name: legalbot-db
           property: host
       - key: POSTGRES_PORT
-        value: "5432"
+        fromDatabase:
+          name: legalbot-db
+          property: port
       - key: POSTGRES_DB
-        value: legal_chunks_db
+        fromDatabase:
+          name: legalbot-db
+          property: database
       - key: POSTGRES_USER
-        value: postgres
+        fromDatabase:
+          name: legalbot-db
+          property: user
       - key: POSTGRES_PASSWORD
-        sync: false   # entered securely in Render Dashboard
+        fromDatabase:
+          name: legalbot-db
+          property: password
 
-      # Backend app settings
+      # Backend URLs & JWT
       - key: FRONTEND_URL
         value: https://legalbot-frontend.onrender.com
       - key: JWT_SECRET_KEY
@@ -35,13 +42,7 @@ services:
       - key: JWT_EXPIRATION_MINUTES
         value: "60"
 
-      # Optional (MongoDB)
-      - key: MONGO_URI
-        value: mongodb+srv://<user>:<pass>@cluster0.y52ne8i.mongodb.net/?retryWrites=true&w=majority
-      - key: MONGO_DB
-        value: document_db
-
-      # API Keys (set in Render Dashboard)
+      # AI Keys (entered manually in dashboard)
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -58,24 +59,14 @@ services:
     plan: free
     dockerfilePath: ./legalbot/web/Dockerfile.frontend
     autoDeploy: true
-
     envVars:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1
 
   # ===========================
-  # 🗄️ PostgreSQL Database (Private Service)
+  # 🗄️ PostgreSQL (Managed)
   # ===========================
-  - type: pserv
+  - type: database
     name: legalbot-db
-    env: docker
-    dockerCommand: postgres
+    databaseName: legal_chunks_db
     plan: free
-
-    envVars:
-      - key: POSTGRES_USER
-        value: postgres
-      - key: POSTGRES_PASSWORD
-        sync: false   # securely entered
-      - key: POSTGRES_DB
-        value: legal_chunks_db

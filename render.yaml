@@ -6,7 +6,7 @@ services:
     name: legalbot-backend
     env: docker
     plan: free
-    dockerfilePath: ./legalbot/backend/Dockerfile
+    dockerfilePath: ./legalbot/backend/Dockerfile.backend
     envVars:
       - key: FRONTEND_URL
         value: https://legalbot-frontend.onrender.com
@@ -15,14 +15,14 @@ services:
       - key: POSTGRES_HOST
         fromService:
           name: legalbot-db
-          type: pserv
+          type: postgres
           property: host
       - key: POSTGRES_DB
         value: legal_chunks_db
       - key: POSTGRES_USER
         value: postgres
       - key: POSTGRES_PASSWORD
-        value: Google@123
+        sync: false   # hide from public YAML
 
       # LLM and API keys
       - key: OPENAI_API_KEY
@@ -44,7 +44,6 @@ services:
       - key: MONGO_DB
         value: document_db
 
-    # Health check to confirm backend is live
     healthCheckPath: /api/v1/health/
     autoDeploy: true
 
@@ -55,25 +54,23 @@ services:
     name: legalbot-frontend
     env: docker
     rootDir: legalbot/web
+    dockerfilePath: ./Dockerfile.frontend   # ✅ relative to rootDir
     plan: free
-    dockerfilePath: ./legalbot/web/Dockerfile.frontend
     envVars:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1
     autoDeploy: true
 
   # ===========================
-  # 🗄️ Postgres Database
+  # 🗄️ PostgreSQL Database
   # ===========================
-  - type: pserv
+  - type: postgres
     name: legalbot-db
-    env: docker
-    dockerCommand: postgres
     plan: free
     envVars:
       - key: POSTGRES_USER
         value: postgres
       - key: POSTGRES_PASSWORD
-        value: Google@123
+        sync: false   # stored securely
       - key: POSTGRES_DB
         value: legal_chunks_db

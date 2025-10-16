@@ -53,7 +53,7 @@ services:
   - type: web
     name: legalbot-frontend
     env: docker
-    rootDir: legalbot/web           # ✅ build context
+    rootDir: legalbot/web               # ✅ build context
     dockerfilePath: ./Dockerfile.frontend   # ✅ relative to rootDir
     plan: free
     envVars:

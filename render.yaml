@@ -49,7 +49,6 @@ services:
         sync: false
 
     healthCheckPath: /api/v1/health/
-    autoDeploy: true
 
   # ===========================
   # 💻 Frontend (Vite / React)

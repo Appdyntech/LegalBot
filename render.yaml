@@ -54,6 +54,7 @@ services:
   - type: web
     name: legalbot-frontend
     env: docker
+    rootDir: legalbot/web
     plan: free
     dockerfilePath: ./legalbot/web/Dockerfile.frontend
     envVars:

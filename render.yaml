@@ -11,7 +11,6 @@ services:
       - key: FRONTEND_URL
         value: https://legalbot-frontend.onrender.com
 
-      # Database Connection
       - key: POSTGRES_HOST
         fromService:
           name: legalbot-db
@@ -24,13 +23,11 @@ services:
       - key: POSTGRES_PASSWORD
         sync: false
 
-      # LLM and API keys
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
 
-      # JWT / Misc backend configs
       - key: JWT_SECRET_KEY
         value: supersecretkey123
       - key: JWT_ALGORITHM
@@ -38,7 +35,6 @@ services:
       - key: JWT_EXPIRATION_MINUTES
         value: "60"
 
-      # Optional — Mongo (if used)
       - key: MONGO_URI
         value: mongodb://mongo:27017/
       - key: MONGO_DB
@@ -53,8 +49,8 @@ services:
   - type: web
     name: legalbot-frontend
     env: docker
-    dockerfilePath: ./Dockerfile.frontend   # ✅ now root-level
     plan: free
+    dockerfilePath: ./Dockerfile.frontend   # <-- now lives in repo root, not inside /web
     envVars:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1

@@ -1,8 +1,12 @@
 # ---------- Build ----------
 FROM node:20-alpine AS build
 WORKDIR /usr/src/app
+
+# Copy frontend dependencies
 COPY legalbot/web/package*.json ./
 RUN npm install
+
+# Copy app source and build
 COPY legalbot/web .
 RUN npm run build
 

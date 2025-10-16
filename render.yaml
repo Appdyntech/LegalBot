@@ -53,8 +53,7 @@ services:
   - type: web
     name: legalbot-frontend
     env: docker
-    rootDir: legalbot/web          # ✅ Render builds from inside this folder
-    dockerfilePath: ./Dockerfile.frontend   # ✅ relative to that folder (not full path)
+    dockerfilePath: ./Dockerfile.frontend   # ✅ now root-level
     plan: free
     envVars:
       - key: VITE_API_BASE_URL

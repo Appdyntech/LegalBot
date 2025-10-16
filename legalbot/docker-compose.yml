@@ -1,40 +1,46 @@
-# remove the "version" line at the top
+version: "3.9"
 
 services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
-    container_name: legalbot_backend
+      dockerfile: backend/Dockerfile
+    container_name: legalbot-backend
     ports:
       - "8705:8705"
     env_file:
-      - ./backend/.env.dev    # ✅ fixed path
+      - backend/.env
+    volumes:
+      - ./backend/app:/app/app
     depends_on:
       - db
+    restart: unless-stopped
 
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
-    container_name: legalbot_frontend
+      dockerfile: web/Dockerfile.frontend
+    container_name: legalbot-frontend
     ports:
-      - "8602:8602"
+      - "8602:80"
     depends_on:
       - backend
+    restart: unless-stopped
 
   db:
     image: postgres:15
-    container_name: legalbot_db
-    restart: always
+    container_name: legalbot-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Google@123
       POSTGRES_DB: legal_chunks_db
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+      - pgdata:/var/lib/postgresql/data
+      # 👇 Mount init.sql so DB auto-creates tables on first startup
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
 
 volumes:
-  postgres_data:
+  pgdata:

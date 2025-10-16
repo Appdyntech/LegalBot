@@ -1,11 +1,13 @@
 fastapi
-uvicorn[standard]
-python-dotenv
-pymongo
+uvicorn
 psycopg2-binary
+pydantic
+sqlalchemy
+python-dotenv
+requests
+pymongo
 openai
-rapidfuzz
-twilio
-pandas
-python-multipart
-# Python deps
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+PyJWT==2.9.0

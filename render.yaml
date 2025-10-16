@@ -8,11 +8,12 @@ services:
     plan: free
     dockerfilePath: ./legalbot/backend/Dockerfile.backend
     autoDeploy: true
+
     envVars:
-      # Database connection (linked to managed Postgres)
+      # Database connection (linked to private service)
       - key: POSTGRES_HOST
         fromService:
-          type: postgres
+          type: pserv
           name: legalbot-db
           property: host
       - key: POSTGRES_PORT
@@ -22,9 +23,9 @@ services:
       - key: POSTGRES_USER
         value: postgres
       - key: POSTGRES_PASSWORD
-        sync: false   # entered securely in Render UI
+        sync: false   # entered securely in Render Dashboard
 
-      # Core backend settings
+      # Backend app settings
       - key: FRONTEND_URL
         value: https://legalbot-frontend.onrender.com
       - key: JWT_SECRET_KEY
@@ -34,13 +35,13 @@ services:
       - key: JWT_EXPIRATION_MINUTES
         value: "60"
 
-      # MongoDB (optional)
+      # Optional (MongoDB)
       - key: MONGO_URI
         value: mongodb+srv://<user>:<pass>@cluster0.y52ne8i.mongodb.net/?retryWrites=true&w=majority
       - key: MONGO_DB
         value: document_db
 
-      # OpenAI & Anthropic keys (set via Render Dashboard)
+      # API Keys (set in Render Dashboard)
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -57,20 +58,24 @@ services:
     plan: free
     dockerfilePath: ./legalbot/web/Dockerfile.frontend
     autoDeploy: true
+
     envVars:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1
 
   # ===========================
-  # 🗄️ PostgreSQL (Managed)
+  # 🗄️ PostgreSQL Database (Private Service)
   # ===========================
-  - type: postgres
+  - type: pserv
     name: legalbot-db
+    env: docker
+    dockerCommand: postgres
     plan: free
+
     envVars:
       - key: POSTGRES_USER
         value: postgres
+      - key: POSTGRES_PASSWORD
+        sync: false   # securely entered
       - key: POSTGRES_DB
         value: legal_chunks_db
-      - key: POSTGRES_PASSWORD
-        sync: false   # set securely in Render Dashboard

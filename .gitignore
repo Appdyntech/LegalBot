@@ -35,3 +35,4 @@ postgres_data/
 *.env
 .env
 legalbot/backend/.env
+*.dump

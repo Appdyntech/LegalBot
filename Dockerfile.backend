@@ -1,12 +1,26 @@
+# ==========================
+# Backend Dockerfile (Render-ready)
+# ==========================
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy your backend directly (not "legalbot/backend")
-COPY backend /app
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    netcat-openbsd \
+ && rm -rf /var/lib/apt/lists/*
 
+# Copy backend code from correct folder
+COPY legalbot/backend /app          # ✅ FIXED path
+
+# Install dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir fastapi uvicorn psycopg2-binary pymongo requests python-dotenv
+    pip install --no-cache-dir -r /app/requirements.txt && \
+    pip install google-auth google-auth-oauthlib google-auth-httplib2 PyJWT
 
+# Expose port
 EXPOSE 8705
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]
+
+# Run FastAPI app with database wait
+CMD ["bash", "/app/app/wait-for-db.sh", "db", "5432", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]

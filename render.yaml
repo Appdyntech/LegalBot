@@ -53,12 +53,13 @@ services:
   # 💻 Frontend (Vite / React)
   # ===========================
   - type: web
-    name: legalbot-frontend-1ib7
+    name: legalbot-frontend
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile.frontend
     autoDeploy: true
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://legalbot-backend-1ib7.onrender.com/api/v1
-    healthCheckPath: /
+        value: https://legalbot-backend.onrender.com/api/v1
+    buildCommand: |
+      echo "🚀 Building with VITE_API_BASE_URL=$VITE_API_BASE_URL"

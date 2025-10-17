@@ -3,14 +3,13 @@ services:
   # 🚀 Backend (FastAPI)
   # ===========================
   - type: web
-    name: legalbot-backend
+    name: legalbot-backend-1ib7
     env: docker
     plan: free
-    dockerfilePath: ./Dockerfile.backend     # ✅ Points to root file now
+    dockerfilePath: ./Dockerfile.backend
     autoDeploy: true
 
     envVars:
-      # Database connection (linked to Render managed Postgres)
       - key: POSTGRES_HOST
         fromDatabase:
           name: legalbot-db
@@ -32,9 +31,9 @@ services:
           name: legalbot-db
           property: password
 
-      # Backend URLs & JWT
+      # URLs & JWT
       - key: FRONTEND_URL
-        value: https://legalbot-frontend.onrender.com
+        value: https://legalbot-frontend-1ib7.onrender.com
       - key: JWT_SECRET_KEY
         value: supersecretkey123
       - key: JWT_ALGORITHM
@@ -42,7 +41,7 @@ services:
       - key: JWT_EXPIRATION_MINUTES
         value: "60"
 
-      # AI Keys (entered manually in dashboard)
+      # AI Keys (entered manually via dashboard)
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -54,12 +53,12 @@ services:
   # 💻 Frontend (Vite / React)
   # ===========================
   - type: web
-    name: legalbot-frontend
+    name: legalbot-frontend-1ib7
     env: docker
     plan: free
-    dockerfilePath: ./Dockerfile.frontend     # ✅ Points to root file now
+    dockerfilePath: ./Dockerfile.frontend
     autoDeploy: true
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://legalbot-backend.onrender.com/api/v1
+        value: https://legalbot-backend-1ib7.onrender.com/api/v1
     healthCheckPath: /

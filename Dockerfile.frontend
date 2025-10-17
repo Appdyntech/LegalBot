@@ -1,17 +1,19 @@
-# ---------- Build ----------
+# ==============================
+# 💻 Frontend Dockerfile (Vite / React)
+# ==============================
+
+# Step 1: Build stage
 FROM node:20-alpine AS build
-WORKDIR /usr/src/app
+WORKDIR /app
+COPY legalbot/web /app
+RUN npm install && npm run build
 
-# Copy frontend dependencies
-COPY legalbot/web/package*.json ./
-RUN npm install
-
-# Copy app source and build
-COPY legalbot/web .
-RUN npm run build
-
-# ---------- Serve ----------
+# Step 2: Serve via NGINX
 FROM nginx:1.25-alpine
-COPY --from=build /usr/src/app/dist /usr/share/nginx/html
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Expose port
 EXPOSE 80
+
+# Start NGINX
 CMD ["nginx", "-g", "daemon off;"]

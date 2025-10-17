@@ -5,7 +5,7 @@ import time
 import plotly.express as px
 
 # -------------------- CONFIG --------------------
-API_BASE = "http://localhost:8705/api/v1"  # ✅ FastAPI backend (Postgres)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
 st.set_page_config(page_title="🎫 LegalBOT Ticket Dashboard", layout="wide")
 
 st.title("🎫 LegalBOT Ticket Management Dashboard")

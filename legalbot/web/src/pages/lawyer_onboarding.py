@@ -3,7 +3,7 @@
 import streamlit as st
 import requests
 
-API_BASE = "http://localhost:8705/api/v1"  # FastAPI backend
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
 
 st.set_page_config(page_title="⚖️ Lawyer Onboarding", layout="wide")
 

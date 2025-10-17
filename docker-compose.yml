@@ -1,46 +1,68 @@
 version: "3.9"
 
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: legalbot-backend
-    ports:
-      - "8705:8705"
-    env_file:
-      - backend/.env
-    volumes:
-      - ./backend/app:/app/app
-    depends_on:
-      - db
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: .
-      dockerfile: web/Dockerfile.frontend
-    container_name: legalbot-frontend
-    ports:
-      - "8602:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
-
+  # ===========================
+  # 🗄️ PostgreSQL Database
+  # ===========================
   db:
-    image: postgres:15
-    container_name: legalbot-db
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Google@123
       POSTGRES_DB: legal_chunks_db
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # 👇 Mount init.sql so DB auto-creates tables on first startup
-      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # ✅ Ensure this file exists at legalbot/backend/init.sql
+      - ./legalbot/backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  # ===========================
+  # 🚀 Backend (FastAPI)
+  # ===========================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    env_file:
+      - ./legalbot/backend/.env      # ✅ Loads all variables from backend/.env
+    environment:
+      POSTGRES_HOST: db              # ✅ Service name acts as hostname in Docker network
+      POSTGRES_PORT: 5432
+      FRONTEND_URL: http://localhost:8602
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8705:8705"
+    restart: unless-stopped
+    volumes:
+      - ./legalbot/backend/app:/app/app
+
+  # ===========================
+  # 💻 Frontend (React / Vite)
+  # ===========================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    environment:
+      # This URL points to backend container (local)
+      VITE_API_BASE_URL: http://localhost:8705/api/v1
+    depends_on:
+      - backend
+    ports:
+      - "8602:80"
+    restart: unless-stopped
+
+# ===========================
+# 🧱 Named Volume
+# ===========================
 volumes:
   pgdata:

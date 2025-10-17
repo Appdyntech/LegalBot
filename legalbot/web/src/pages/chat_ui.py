@@ -4,7 +4,7 @@ import streamlit as st
 import requests
 import uuid
 
-API_BASE = "http://localhost:8705/api/v1"
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
 
 st.set_page_config(page_title="⚖️ LegalBOT Chat", layout="wide")
 st.title("⚖️ LegalBOT - AI Legal Assistant")

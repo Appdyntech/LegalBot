@@ -13,20 +13,27 @@ const GoogleCallback: React.FC = () => {
     const picture = params.get("picture");
 
     if (jwt) {
+      // ✅ Save auth info
       localStorage.setItem("token", jwt);
       localStorage.setItem(
         "user",
         JSON.stringify({ email, name, picture })
       );
-      navigate("/dashboard"); // Redirect after successful login
+
+      console.log("✅ Google login successful:", { email, name, picture });
+
+      // ✅ Redirect user to chat (main page)
+      navigate("/chat");
     } else {
-      navigate("/login");
+      console.error("❌ Missing JWT in Google callback URL");
+      navigate("/");
     }
   }, [navigate]);
 
   return (
-    <div style={{ textAlign: "center", marginTop: "30vh" }}>
-      <h3>Verifying Google Login...</h3>
+    <div className="flex flex-col items-center justify-center h-screen text-center">
+      <h2 className="text-xl font-semibold mb-3">🔄 Signing you in...</h2>
+      <p className="text-gray-600">Please wait while we verify your Google login.</p>
     </div>
   );
 };

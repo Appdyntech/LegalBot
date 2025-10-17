@@ -1,15 +1,17 @@
 #!/bin/bash
+# wait-for-db.sh
+
 set -e
 
-host="$1"
-port="$2"
-shift 2
-cmd="$@"
+# Use env vars provided by Render
+HOST="${POSTGRES_HOST:-localhost}"
+PORT="${POSTGRES_PORT:-5432}"
 
-echo "⏳ Waiting for Postgres at $host:$port..."
-until nc -z "$host" "$port"; do
+echo "⏳ Waiting for Postgres at $HOST:$PORT..."
+until nc -z "$HOST" "$PORT"; do
+  echo "Still waiting for database at $HOST:$PORT..."
   sleep 2
 done
 
-echo "✅ Postgres is up - starting backend"
-exec $cmd
+echo "✅ Database is ready! Starting app..."
+exec "$@"

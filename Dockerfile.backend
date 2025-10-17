@@ -24,4 +24,5 @@ RUN pip install --no-cache-dir --upgrade pip && \
 EXPOSE 8705
 
 # Run FastAPI app (with DB wait)
-CMD ["bash", "app/wait-for-db.sh", "db", "5432", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]
+CMD ["bash", "app/wait-for-db.sh", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]
+

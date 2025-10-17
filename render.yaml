@@ -6,7 +6,7 @@ services:
     name: legalbot-backend
     env: docker
     plan: free
-    dockerfilePath: ./legalbot/backend/Dockerfile.backend
+    dockerfilePath: ./Dockerfile.backend     # ✅ Points to root file now
     autoDeploy: true
 
     envVars:
@@ -57,7 +57,7 @@ services:
     name: legalbot-frontend
     env: docker
     plan: free
-    dockerfilePath: ./legalbot/web/Dockerfile.frontend
+    dockerfilePath: ./Dockerfile.frontend     # ✅ Points to root file now
     autoDeploy: true
     envVars:
       - key: VITE_API_BASE_URL

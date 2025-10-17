@@ -36,3 +36,11 @@ postgres_data/
 .env
 legalbot/backend/.env
 *.dump
+
+# Prevent large files from ever being committed again
+*.dump
+*.bak
+*.gguf
+*.db
+*.csv
+*.zip

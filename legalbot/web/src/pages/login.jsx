@@ -1,5 +1,6 @@
-// src/pages/Login.tsx
-import React, { useState, ChangeEvent } from "react";
+// src/pages/login.jsx
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import customerApi from "../api/customerApi";
 import GoogleLoginButton from "../components/GoogleLoginButton";
 import {
@@ -8,70 +9,101 @@ import {
   Typography,
   Box,
   CircularProgress,
+  Divider,
 } from "@mui/material";
 
-interface CustomerForm {
-  name: string;
-  email: string;
-  phone?: string;
-  location?: string;
-}
+const Login = () => {
+  const navigate = useNavigate();
 
-const Login: React.FC = () => {
-  const [form, setForm] = useState<CustomerForm>({
+  const [form, setForm] = useState({
     name: "",
     email: "",
     phone: "",
     location: "",
   });
-  const [loading, setLoading] = useState<boolean>(false);
-  const [message, setMessage] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+  // ----------------------------
+  // Handle form input change
+  // ----------------------------
+  const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // ----------------------------
+  // Handle manual registration
+  // ----------------------------
   const handleRegister = async () => {
     if (!form.name || !form.email) {
-      setMessage("⚠️ Please fill in your name and email.");
+      setMessage("⚠️ Please enter your name and email to register.");
       return;
     }
 
     setLoading(true);
     setMessage("");
+
     try {
       const res = await customerApi.register({
         ...form,
         google_verified: false,
       });
-      setMessage(`✅ Registered successfully! Customer ID: ${res.data.customer_id}`);
-      setForm({ name: "", email: "", phone: "", location: "" });
-    } catch (err: any) {
+
+      // ✅ Persist user session
+      localStorage.setItem("user", JSON.stringify(res.data));
+      localStorage.setItem("token", res.data?.token || "manual_user");
+
+      // ✅ Notify and redirect
+      setMessage("✅ Registered successfully! Redirecting to dashboard...");
+      setTimeout(() => navigate("/dashboard"), 1200);
+    } catch (err) {
       const errorMsg =
         err.response?.data?.detail || err.message || "Registration failed.";
-      setMessage("❌ " + errorMsg);
+
+      if (
+        errorMsg.includes("unique constraint") ||
+        errorMsg.includes("already exists")
+      ) {
+        setMessage("ℹ️ User already registered. Redirecting to dashboard...");
+        setTimeout(() => navigate("/dashboard"), 1200);
+      } else {
+        setMessage("❌ " + errorMsg);
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // ----------------------------
+  // Render Login Page
+  // ----------------------------
   return (
-    <Box sx={{ maxWidth: 420, mx: "auto", mt: 10, textAlign: "center" }}>
-      <Typography variant="h4" gutterBottom>
+    <Box
+      sx={{
+        maxWidth: 420,
+        mx: "auto",
+        mt: 10,
+        p: 4,
+        textAlign: "center",
+        borderRadius: 3,
+        boxShadow: 3,
+        backgroundColor: "#fafafa",
+      }}
+    >
+      <Typography variant="h4" gutterBottom sx={{ fontWeight: "bold" }}>
         ⚖️ Welcome to LegalBOT
       </Typography>
 
-      <Typography variant="subtitle1" sx={{ mb: 3 }}>
+      <Typography variant="subtitle1" sx={{ mb: 3, color: "text.secondary" }}>
         Smart Legal Assistance Platform
       </Typography>
 
       {/* ---- Google Login ---- */}
       <GoogleLoginButton />
 
-      <Typography variant="body1" sx={{ mt: 3, mb: 1 }}>
-        or register manually
-      </Typography>
+      <Divider sx={{ my: 3 }}>or register manually</Divider>
 
+      {/* ---- Manual Registration ---- */}
       <TextField
         label="Full Name"
         name="name"
@@ -114,7 +146,11 @@ const Login: React.FC = () => {
         onClick={handleRegister}
         disabled={loading}
       >
-        {loading ? <CircularProgress size={22} color="inherit" /> : "Register"}
+        {loading ? (
+          <CircularProgress size={22} color="inherit" />
+        ) : (
+          "Register"
+        )}
       </Button>
 
       {message && (
@@ -126,6 +162,8 @@ const Login: React.FC = () => {
               ? "green"
               : message.startsWith("⚠️")
               ? "#ff9800"
+              : message.startsWith("ℹ️")
+              ? "blue"
               : "red",
           }}
         >

@@ -1,9 +1,9 @@
 # ==========================
-# Backend Dockerfile (Render-ready)
+# Backend Dockerfile (Render-safe)
 # ==========================
 FROM python:3.11-slim
 
-# Set working directory *before* copying
+# Set working directory before copying
 WORKDIR /app
 
 # Install system dependencies
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
  && rm -rf /var/lib/apt/lists/*
 
 # Copy backend source code from correct path
-COPY legalbot/backend /app    # ✅ Copy after WORKDIR is set
+COPY legalbot/backend /app
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -23,5 +23,5 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Expose backend port
 EXPOSE 8705
 
-# Run FastAPI app (with wait-for-db script)
+# Run FastAPI app (with DB wait)
 CMD ["bash", "app/wait-for-db.sh", "db", "5432", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]

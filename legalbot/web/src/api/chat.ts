@@ -6,7 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705
  * Types (lightweight)
  */
 export type ChatReq = {
-  query: string; // backend expects `query`
+  query: string;
   knowledge_base?: string;
   model_name?: string;
   mode?: string;
@@ -24,9 +24,7 @@ export type ChatResponse = {
 };
 
 /**
- * Primary chat call: sends the JSON your backend expects.
- * - `query` is required.
- * - returns parsed JSON or throws with backend error text.
+ * Send a chat query to backend
  */
 export async function sendChatQuestion(
   query: string,
@@ -38,7 +36,7 @@ export async function sendChatQuestion(
     user?: { id?: string; name?: string };
   }
 ): Promise<ChatResponse> {
-  const endpoint = `${API_BASE}/chat/ask`;
+  const endpoint = `${API_BASE_URL}/chat/ask`;
   console.log("📡 POST ->", endpoint);
 
   const payload: ChatReq = {
@@ -57,14 +55,12 @@ export async function sendChatQuestion(
       body: JSON.stringify(payload),
     });
 
-    // capture body text for non-ok responses (helpful for pydantic validation errors)
     if (!res.ok) {
       const txt = await res.text().catch(() => "<no body>");
       console.error(`❌ Backend returned ${res.status}:`, txt);
       throw new Error(`Backend ${res.status}: ${txt}`);
     }
 
-    // success path
     const data = await res.json();
     console.log("✅ chat response:", data);
     return data as ChatResponse;
@@ -75,19 +71,13 @@ export async function sendChatQuestion(
 }
 
 /**
- * Legacy alias used by other components — keep for compatibility.
- * Accepts:
- *  - a string (question/query) -> sendChatQuestion
- *  - an object -> normalized into sendChatQuestion call
+ * Legacy alias — maintains compatibility
  */
 export const sendChat = async (payloadOrQuestion: any, maybeSessionId?: string) => {
-  // If the caller passed a string (question or query) use the simple flow
   if (typeof payloadOrQuestion === "string") {
-    // treat string as the user's query
     return sendChatQuestion(payloadOrQuestion, maybeSessionId);
   }
 
-  // If caller passed an object, normalize fields (support query, question, q, kb, model)
   const obj = payloadOrQuestion || {};
   const questionOrQuery = obj.query || obj.question || obj.q || "";
   const session_id = obj.session_id || maybeSessionId || "web-session";
@@ -104,11 +94,11 @@ export const sendChat = async (payloadOrQuestion: any, maybeSessionId?: string) 
 };
 
 /**
- * Chat history helper (unchanged semantics)
+ * Fetch chat history
  */
 export async function getChatHistory(session_id: string) {
   try {
-    const endpoint = `${API_BASE}/chat/history?session_id=${encodeURIComponent(session_id)}&limit=20`;
+    const endpoint = `${API_BASE_URL}/chat/history?session_id=${encodeURIComponent(session_id)}&limit=20`;
     console.log("📜 GET ->", endpoint);
     const res = await fetch(endpoint);
     if (!res.ok) {

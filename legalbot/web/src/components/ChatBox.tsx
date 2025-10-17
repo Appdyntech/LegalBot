@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { sendChat } from "../api/chat";
 import api from "../api/apiClient";
 
-const API_BASE_URL = "http://127.0.0.1:8705/api/v1";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
 
 interface HistoryItem {
   id: number;
@@ -26,9 +26,7 @@ export default function ChatBox() {
   const [showFeedback, setShowFeedback] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // -------------------------------------------------------------
   // 🧠 Load chat history
-  // -------------------------------------------------------------
   useEffect(() => {
     const loadHistory = async () => {
       try {
@@ -53,9 +51,7 @@ export default function ChatBox() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // -------------------------------------------------------------
-  // 🎤 Speech recognition
-  // -------------------------------------------------------------
+  // 🎤 Voice input setup
   useEffect(() => {
     if ("webkitSpeechRecognition" in window) {
       const SpeechRecognition =
@@ -74,9 +70,6 @@ export default function ChatBox() {
     }
   }, []);
 
-  // -------------------------------------------------------------
-  // ✉️ Send message
-  // -------------------------------------------------------------
   const handleSend = async (voiceQuery?: string) => {
     const question = voiceQuery || query.trim();
     if (!question) return;
@@ -110,27 +103,16 @@ export default function ChatBox() {
     }
   };
 
-  // -------------------------------------------------------------
-  // 🎤 Voice input
-  // -------------------------------------------------------------
   const handleVoiceInput = () => {
-    if (recognition) {
-      recognition.start();
-      console.log("🎤 Listening...");
-    } else {
-      alert("Voice input not supported in this browser.");
-    }
+    if (recognition) recognition.start();
+    else alert("Voice input not supported in this browser.");
   };
 
-  // -------------------------------------------------------------
-  // 🧩 Feedback Handlers
-  // -------------------------------------------------------------
   const handleFeedback = async (option: "satisfied" | "need_assistance") => {
     if (!showFeedback) return;
     setShowFeedback(null);
 
     try {
-      // Step 1: send feedback
       await api.post("/chat/feedback", {
         chat_id: showFeedback,
         feedback_option: option,
@@ -142,7 +124,6 @@ export default function ChatBox() {
         session_id: sessionId,
       });
 
-      // Step 2: if user needs help, create ticket
       if (option === "need_assistance") {
         const resp = await api.post("/tickets/create", {
           chat_id: showFeedback,
@@ -165,9 +146,6 @@ export default function ChatBox() {
     }
   };
 
-  // -------------------------------------------------------------
-  // 🧱 JSX
-  // -------------------------------------------------------------
   return (
     <div className="flex flex-col h-[90vh] max-w-4xl mx-auto border rounded-lg shadow-md p-4 bg-white">
       <h2 className="text-xl font-semibold text-center mb-4">
@@ -193,24 +171,21 @@ export default function ChatBox() {
           </div>
         ))}
 
-        {/* Feedback Section */}
         {showFeedback && (
           <div className="mt-4 p-3 bg-yellow-50 border rounded-md text-center">
-            <p className="font-medium mb-2">
-              🤔 Was your query answered satisfactorily?
-            </p>
+            <p className="font-medium mb-2">🤔 Was your query answered satisfactorily?</p>
             <div className="flex justify-center gap-4">
               <button
                 onClick={() => handleFeedback("satisfied")}
                 className="bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600"
               >
-                ✅ Yes, my query is answered
+                ✅ Yes
               </button>
               <button
                 onClick={() => handleFeedback("need_assistance")}
                 className="bg-red-500 text-white px-3 py-2 rounded-md hover:bg-red-600"
               >
-                ⚖️ I need assistance from a lawyer
+                ⚖️ Need Lawyer
               </button>
             </div>
           </div>
@@ -225,7 +200,6 @@ export default function ChatBox() {
         </div>
       )}
 
-      {/* Input controls */}
       <div className="flex items-center gap-2 mt-4">
         <textarea
           value={query}

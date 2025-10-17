@@ -1,13 +1,13 @@
 // web/src/api/apiClient.ts
 import axios from "axios";
 
-// ✅ Load from Vite environment
+// ✅ Load from Vite environment or fallback to localhost
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
 
-console.log("🌍 Using API base:", API_BASE);
+console.log("🌍 Using API base:", API_BASE_URL);
 
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },

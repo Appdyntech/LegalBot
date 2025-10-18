@@ -2,17 +2,17 @@ services:
   # ===========================
   # 🚀 Backend (FastAPI)
   # ===========================
-  - key: APP_ENV
-  - value: prod
-
   - type: web
     name: legalbot-backend
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile.backend
     autoDeploy: true
-
     envVars:
+      # Environment
+      - key: APP_ENV
+        value: prod
+
       # Database Connection (Render Managed DB)
       - key: POSTGRES_HOST
         fromDatabase:

@@ -7,7 +7,7 @@ $apiKey = "rnd_O21wFNmCDyCM4rblNLGvs55Bhgbr"
 
 # 🧾 List of Blueprint IDs to delete
 $blueprintIds = @(
-    "exs-d3opukemcj7s739g9kjg"
+    "exs-d3oq2495pdvs73a3otmg"
 )
 
 # 🧠 Set headers for the API request

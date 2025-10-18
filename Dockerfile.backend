@@ -7,21 +7,21 @@ FROM python:3.11-slim
 # Set work directory
 WORKDIR /app
 
-# Copy backend source (adjust to your structure)
+# Copy backend source
 COPY legalbot/backend /app
 
-# Install system packages
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     netcat-openbsd \
  && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
+# Copy requirements file and install
+COPY legalbot/backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Expose the backend port
+# Expose backend port
 EXPOSE 8705
 
 # Run FastAPI app

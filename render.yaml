@@ -3,13 +3,14 @@ services:
   # 🚀 Backend (FastAPI)
   # ===========================
   - type: web
-    name: legalbot-backend-1ib7
+    name: legalbot-backend
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile.backend
     autoDeploy: true
 
     envVars:
+      # Database Connection (Render Managed DB)
       - key: POSTGRES_HOST
         fromDatabase:
           name: legalbot-db
@@ -31,9 +32,13 @@ services:
           name: legalbot-db
           property: password
 
-      # URLs & JWT
+      # URLs & Auth
       - key: FRONTEND_URL
-        value: https://legalbot-frontend-1ib7.onrender.com
+        value: https://legalbot-frontend.onrender.com
+      - key: GOOGLE_REDIRECT_URI
+        value: https://legalbot-backend.onrender.com/api/v1/auth/google/callback
+
+      # JWT
       - key: JWT_SECRET_KEY
         value: supersecretkey123
       - key: JWT_ALGORITHM
@@ -41,7 +46,7 @@ services:
       - key: JWT_EXPIRATION_MINUTES
         value: "60"
 
-      # AI Keys (entered manually via dashboard)
+      # AI Keys (manually add on Render Dashboard)
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -62,4 +67,4 @@ services:
       - key: VITE_API_BASE_URL
         value: https://legalbot-backend.onrender.com/api/v1
     buildCommand: |
-      echo "🚀 Building with VITE_API_BASE_URL=$VITE_API_BASE_URL"
+      echo "🚀 Building frontend with VITE_API_BASE_URL=$VITE_API_BASE_URL"

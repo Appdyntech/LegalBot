@@ -2,6 +2,9 @@ services:
   # ===========================
   # 🚀 Backend (FastAPI)
   # ===========================
+  - key: APP_ENV
+  - value: prod
+
   - type: web
     name: legalbot-backend
     env: docker

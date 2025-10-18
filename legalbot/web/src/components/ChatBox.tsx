@@ -3,10 +3,11 @@ import React, { useState, useRef, useEffect } from "react";
 import { sendChat } from "../api/chat";
 import api from "../api/apiClient";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
 
 interface HistoryItem {
-  id: number;
+  id?: number;
   session_id: string;
   question: string;
   answer: string;
@@ -21,32 +22,43 @@ export default function ChatBox() {
   const [messages, setMessages] = useState<
     { role: "user" | "bot"; text: string; confidence?: number; chatId?: string }[]
   >([]);
-  const [sessionId] = useState(() => `sess-${Date.now()}`);
   const [recognition, setRecognition] = useState<any>(null);
   const [showFeedback, setShowFeedback] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 🧠 Load chat history
+  // ✅ Persistent session using localStorage
+  const [sessionId] = useState(() => {
+    const existing = localStorage.getItem("session_id");
+    if (existing) return existing;
+    const newId = `sess-${Date.now()}`;
+    localStorage.setItem("session_id", newId);
+    return newId;
+  });
+
+  // 🧠 Load chat history for this session only
   useEffect(() => {
     const loadHistory = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/chat/history?limit=20`);
+        const res = await fetch(`${API_BASE_URL}/chat/history?session_id=${sessionId}&limit=20`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (data.success && data.data.length > 0) {
+
+        if (data.success && Array.isArray(data.data)) {
           const formatted = data.data.flatMap((item: HistoryItem) => [
             { role: "user" as const, text: item.question },
             { role: "bot" as const, text: item.answer, confidence: item.confidence },
           ]);
-          setMessages(formatted);
+          setMessages(formatted.reverse()); // oldest first
         }
       } catch (err) {
         console.error("Error loading chat history:", err);
-        setError("Unable to load chat history.");
+        setError("⚠️ Unable to load previous chat history.");
       }
     };
     loadHistory();
-  }, []);
+  }, [sessionId]);
 
+  // 🧭 Auto scroll on new messages
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -70,6 +82,7 @@ export default function ChatBox() {
     }
   }, []);
 
+  // 🚀 Send chat message
   const handleSend = async (voiceQuery?: string) => {
     const question = voiceQuery || query.trim();
     if (!question) return;
@@ -92,22 +105,26 @@ export default function ChatBox() {
         },
       ]);
 
-      if (res.feedback_prompt) setShowFeedback((res as any).chat_id || "latest");
+      if (res.feedback_prompt) {
+        setShowFeedback((res as any).chat_id || "latest");
+      }
 
       setQuery("");
     } catch (err) {
       console.error("Chat API error:", err);
-      setError("Failed to fetch response from LegalBOT API.");
+      setError("❌ Failed to fetch response from LegalBOT API.");
     } finally {
       setLoading(false);
     }
   };
 
+  // 🎙️ Voice input handler
   const handleVoiceInput = () => {
     if (recognition) recognition.start();
-    else alert("Voice input not supported in this browser.");
+    else alert("🎙️ Voice input not supported in this browser.");
   };
 
+  // 📝 Feedback handling
   const handleFeedback = async (option: "satisfied" | "need_assistance") => {
     if (!showFeedback) return;
     setShowFeedback(null);
@@ -142,7 +159,7 @@ export default function ChatBox() {
       }
     } catch (err) {
       console.error("❌ Feedback/Ticket Error:", err);
-      alert("Failed to record feedback or create ticket.");
+      alert("⚠️ Failed to record feedback or create ticket.");
     }
   };
 
@@ -152,7 +169,14 @@ export default function ChatBox() {
         ⚖️ LegalBOT AI Assistant
       </h2>
 
+      {/* Chat Window */}
       <div className="flex-1 overflow-y-auto border p-3 rounded-md bg-gray-50">
+        {messages.length === 0 && (
+          <p className="text-center text-gray-500 italic mt-4">
+            💬 Start a conversation by typing your legal question below.
+          </p>
+        )}
+
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -171,9 +195,12 @@ export default function ChatBox() {
           </div>
         ))}
 
+        {/* Feedback Prompt */}
         {showFeedback && (
           <div className="mt-4 p-3 bg-yellow-50 border rounded-md text-center">
-            <p className="font-medium mb-2">🤔 Was your query answered satisfactorily?</p>
+            <p className="font-medium mb-2">
+              🤔 Was your query answered satisfactorily?
+            </p>
             <div className="flex justify-center gap-4">
               <button
                 onClick={() => handleFeedback("satisfied")}
@@ -194,12 +221,14 @@ export default function ChatBox() {
         <div ref={chatEndRef}></div>
       </div>
 
+      {/* Error Display */}
       {error && (
         <div className="text-red-600 bg-red-100 border border-red-300 rounded-md p-2 mt-2">
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
+      {/* Input Controls */}
       <div className="flex items-center gap-2 mt-4">
         <textarea
           value={query}
@@ -211,6 +240,7 @@ export default function ChatBox() {
         <button
           onClick={handleVoiceInput}
           className="bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600"
+          title="Voice Input"
         >
           🎤
         </button>

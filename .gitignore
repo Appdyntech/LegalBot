@@ -44,3 +44,7 @@ legalbot/backend/.env
 *.db
 *.csv
 *.zip
+
+
+# Allow Render-safe frontend env (no secrets)
+!legalbot/web/.env.production

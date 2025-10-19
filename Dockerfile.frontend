@@ -1,5 +1,5 @@
 # ===========================
-# Stage 1: Build React App
+# Stage 1: Build React/Vite App
 # ===========================
 FROM node:20-alpine AS build
 
@@ -7,6 +7,9 @@ WORKDIR /app
 
 # Copy frontend source code
 COPY legalbot/web /app
+
+# 👇 Ensure .env.production is available to Vite at build time
+COPY legalbot/web/.env.production /app/.env.production
 
 # Install dependencies and build
 RUN npm install && npm run build

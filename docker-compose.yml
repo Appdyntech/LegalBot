@@ -1,6 +1,8 @@
 # ==============================
-# 🧩 LegalBOT - Local Docker Compose
+# 🧩 LegalBOT - Local Docker Compose (Development)
 # ==============================
+
+version: "3.9"
 
 services:
   # ===========================
@@ -15,7 +17,6 @@ services:
       POSTGRES_DB: legal_chunks_db
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # ✅ Initialize database if needed
       - ./legalbot/backend/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
@@ -35,16 +36,10 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     env_file:
-      - ./legalbot/backend/.env   # ✅ Local env file
+      - ./legalbot/backend/.env  # ✅ Local backend env
     environment:
       APP_ENV: dev
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: legal_chunks_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Google@123
-      FRONTEND_URL: http://localhost:8602
-      GOOGLE_REDIRECT_URI: http://localhost:8705/api/v1/auth/google/callback
+      POSTGRES_HOST: db  # ✅ Container network alias
     depends_on:
       db:
         condition: service_healthy
@@ -63,7 +58,7 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     environment:
-      # ✅ Point to backend container
+      # ✅ Point to local backend container
       VITE_API_BASE_URL: http://localhost:8705/api/v1
     depends_on:
       - backend
@@ -72,7 +67,7 @@ services:
     restart: unless-stopped
 
 # ===========================
-# 🧱 Named Volume
+# 🧱 Persistent Volume
 # ===========================
 volumes:
   pgdata:

@@ -5,12 +5,22 @@ from typing import Optional
 from functools import lru_cache
 
 # ----------------------------------------------------
-# Load environment
+# 🌍 Dynamic Environment Loader (local vs cloud)
 # ----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parents[1]
-ENV_PATH = BASE_DIR / ".env"
+
+# Detect environment mode
+APP_ENV = os.getenv("APP_ENV", "dev").lower()
+
+# Select which .env file to load
+if APP_ENV == "prod":
+    ENV_PATH = BASE_DIR / ".env.gcp"
+else:
+    ENV_PATH = BASE_DIR / ".env"
+
+# Load environment variables
 loaded = load_dotenv(dotenv_path=ENV_PATH, override=True)
-print(f"🔍 Loading .env from {ENV_PATH} (success={loaded})")
+print(f"🔍 Loading environment from: {ENV_PATH} (success={loaded}) — MODE: {APP_ENV.upper()}")
 
 
 class Settings:
@@ -58,7 +68,7 @@ class Settings:
     )
 
     # ----------------------------
-    # JWT Settings (used for internal auth)
+    # JWT Settings
     # ----------------------------
     JWT_SECRET_KEY: Optional[str] = os.getenv("JWT_SECRET_KEY", "supersecretkey123")
     JWT_ALGORITHM: Optional[str] = os.getenv("JWT_ALGORITHM", "HS256")
@@ -71,9 +81,14 @@ class Settings:
     CHAT_CSV_PATH: Optional[str] = os.getenv("CHAT_CSV_PATH", "chat_history.csv")
 
     # ----------------------------
-    # ✅ NEW FRONTEND CONFIG
+    # Frontend URLs
     # ----------------------------
     FRONTEND_URL: Optional[str] = os.getenv("FRONTEND_URL", "http://localhost:8602")
+
+    # ----------------------------
+    # App Environment
+    # ----------------------------
+    APP_ENV: Optional[str] = APP_ENV
 
 
 # ----------------------------------------------------
@@ -90,4 +105,5 @@ def get_settings():
         print(f"✅ Google Client ID starts with: {s.GOOGLE_CLIENT_ID[:10]}...")
     print(f"✅ Google Redirect URI: {s.GOOGLE_REDIRECT_URI}")
     print(f"✅ FRONTEND_URL: {s.FRONTEND_URL}")
+    print(f"🌐 Environment Mode: {s.APP_ENV.upper()}")
     return s

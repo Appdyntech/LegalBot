@@ -4,6 +4,7 @@ from psycopg2.extras import RealDictCursor
 import datetime
 import json
 from typing import Dict, Any, Optional
+from urllib.parse import quote_plus
 from .config import get_settings
 
 settings = get_settings()
@@ -15,16 +16,21 @@ settings = get_settings()
 def get_postgres_conn():
     """Create and return a new PostgreSQL connection."""
     try:
+        # ✅ Safely encode the password (handles @, !, $, etc.)
+        safe_password = quote_plus(settings.POSTGRES_PASSWORD)
+
         conn = psycopg2.connect(
             host=settings.POSTGRES_HOST,
             port=settings.POSTGRES_PORT,
             dbname=settings.POSTGRES_DB,
             user=settings.POSTGRES_USER,
-            password=settings.POSTGRES_PASSWORD,
+            password=settings.POSTGRES_PASSWORD,  # use original for psycopg2 (not URL string)
             connect_timeout=5
         )
+
         print(f"[db_postgres] connected to {settings.POSTGRES_DB} ✅")
         return conn
+
     except Exception as e:
         print(f"[db_postgres] ❌ Connection error: {e}")
         return None
@@ -44,11 +50,11 @@ def init_chat_table():
         cur = conn.cursor()
         cur.execute("""
         CREATE TABLE IF NOT EXISTS legal_chat_history (
-            id SERIAL PRIMARY KEY,
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             chat_id VARCHAR(64),
             session_id VARCHAR(128),
             timestamp TIMESTAMPTZ DEFAULT NOW(),
-            user_id VARCHAR(64),
+            user_id UUID,
             user_phone VARCHAR(32),
             user_name VARCHAR(128),
             question TEXT,
@@ -59,7 +65,7 @@ def init_chat_table():
             input_channel VARCHAR(32),
             retrieval_mode VARCHAR(64),
             sources_json JSONB,
-            ticket_id VARCHAR(64),
+            ticket_id UUID,
             notes TEXT,
             query_category VARCHAR(64),
             ticket_tag VARCHAR(128),
@@ -78,11 +84,8 @@ def init_chat_table():
 # ----------------------------------------------------
 # Save chat / conversation entry
 # ----------------------------------------------------
-def insert_chat_record(entry: Dict[str, Any]) -> Optional[int]:
-    """
-    Insert chat/ticket record into Postgres.
-    Returns new record ID on success.
-    """
+def insert_chat_record(entry: Dict[str, Any]) -> Optional[str]:
+    """Insert chat/ticket record into Postgres and return UUID."""
     conn = get_postgres_conn()
     if not conn:
         print("[db_postgres.insert_chat_record] ❌ No DB connection.")
@@ -107,11 +110,13 @@ def insert_chat_record(entry: Dict[str, Any]) -> Optional[int]:
         RETURNING id;
         """
 
-        # ✅ Add default timestamp
+        # Default values
         if not entry.get("timestamp"):
             entry["timestamp"] = datetime.datetime.utcnow().isoformat()
 
-        # ✅ Convert non-string fields (lists/dicts) to JSON string
+        if not entry.get("ticket_id"):
+            entry["ticket_id"] = None
+
         if entry.get("sources_json") and isinstance(entry["sources_json"], (list, dict)):
             entry["sources_json"] = json.dumps(entry["sources_json"], ensure_ascii=False)
 
@@ -130,7 +135,7 @@ def insert_chat_record(entry: Dict[str, Any]) -> Optional[int]:
 
 
 # ----------------------------------------------------
-# Fetch chat records (for history API)
+# Fetch chat history
 # ----------------------------------------------------
 def get_chat_history(limit: int = 50):
     """Fetch the most recent chat records."""
@@ -150,6 +155,41 @@ def get_chat_history(limit: int = 50):
     except Exception as e:
         print(f"[db_postgres.get_chat_history] ❌ Error: {e}")
         return []
+    finally:
+        conn.close()
+
+
+# ----------------------------------------------------
+# 🕒 AUTO CLOSE STALE TICKETS
+# ----------------------------------------------------
+def auto_close_stale_tickets(days: int = 7):
+    """Mark tickets as closed if older than X days and still open."""
+    conn = get_postgres_conn()
+    if not conn:
+        print("[db_postgres.auto_close_stale_tickets] ❌ No DB connection.")
+        return 0
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE legal_tickets
+            SET status = 'closed', updated_at = NOW(), closure_comment = 'Auto-closed after inactivity'
+            WHERE status = 'open'
+              AND created_at < NOW() - INTERVAL '%s days'
+            RETURNING ticket_id;
+            """,
+            (days,),
+        )
+        closed = cur.fetchall()
+        conn.commit()
+        count = len(closed)
+        print(f"[db_postgres.auto_close_stale_tickets] ✅ Closed {count} stale tickets (> {days} days old).")
+        return count
+    except Exception as e:
+        print(f"[db_postgres.auto_close_stale_tickets] ❌ Error: {e}")
+        conn.rollback()
+        return 0
     finally:
         conn.close()
 

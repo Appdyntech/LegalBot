@@ -1,7 +1,6 @@
 import time
 import asyncio
 import traceback
-import json
 from fastapi import APIRouter, HTTPException, Body, Query
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel
@@ -12,14 +11,13 @@ from ..rag import RAGRetriever
 from ..llm_adapter import safe_llm_answer
 from ..config import get_settings
 from ..db_postgres import get_postgres_conn
-from ..utils import save_chat_to_postgres  # ✅ centralized DB logging
+from ..utils import save_chat_to_postgres  # central DB logging helper
 
 # ----------------------------------------------------
 # ROUTER SETUP
 # ----------------------------------------------------
 router = APIRouter(tags=["Chat"])
 settings = get_settings()
-
 
 # ----------------------------------------------------
 # MODELS
@@ -32,9 +30,10 @@ class ChatRequest(BaseModel):
     mode: Optional[str] = "summarize"
     session_id: Optional[str] = None
     input_channel: Optional[str] = "web"
-    user_id: Optional[str] = None
-    user_name: Optional[str] = "Guest"
-    user_phone: Optional[str] = None
+    customer_id: Optional[str] = None
+    customer_name: Optional[str] = "Guest"
+    customer_email: Optional[str] = None
+    create_ticket: Optional[bool] = False
 
 
 class ChatResponse(BaseModel):
@@ -45,23 +44,49 @@ class ChatResponse(BaseModel):
     retrieval_score: Optional[float] = None
     context_sources: Optional[List[Dict[str, Any]]] = None
     response_time_ms: float
-    retrieval_mode: str  # RAG or LLM
+    retrieval_mode: str
     feedback_prompt: Optional[bool] = False
+    ticket_id: Optional[str] = None  # ✅ UUID-compatible
+    issue_category: Optional[str] = None
 
 
 class FeedbackRequest(BaseModel):
     chat_id: str
     feedback_option: str
     feedback_text: Optional[str] = None
-    user_id: Optional[str] = None
+    customer_id: Optional[str] = None
     session_id: Optional[str] = None
 
 
 # ----------------------------------------------------
-# MEMORY HANDLER
+# 🔍 AUTO ISSUE CATEGORIZER
+# ----------------------------------------------------
+def categorize_issue(query: str) -> str:
+    """Lightweight rule-based classifier for legal topics."""
+    q = query.lower()
+
+    CATEGORY_KEYWORDS = {
+        "Criminal": ["murder", "crime", "theft", "assault", "police", "arrest", "bail", "violence"],
+        "Civil": ["property", "tenant", "dispute", "agreement", "ownership", "contract", "possession"],
+        "Corporate": ["company", "director", "shareholder", "startup", "business", "merger", "ipo"],
+        "Tax": ["tax", "gst", "income", "deduction", "penalty", "assessment"],
+        "Family": ["divorce", "marriage", "custody", "child", "maintenance", "alimony"],
+        "Labor": ["employee", "employment", "salary", "grievance", "termination", "wages"],
+        "Constitutional": ["fundamental rights", "citizen", "constitution", "violation"],
+    }
+
+    for category, keywords in CATEGORY_KEYWORDS.items():
+        if any(word in q for word in keywords):
+            return category
+
+    return "General"
+
+
+# ----------------------------------------------------
+# 🧾 UTILITY: Retrieve previous chat context
 # ----------------------------------------------------
 def get_user_memory(conn, session_id: str, limit: int = 3) -> str:
-    """Fetch the last few chat turns for a given session for continuity."""
+    """Fetch the last few messages for contextual continuity."""
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
@@ -77,18 +102,34 @@ def get_user_memory(conn, session_id: str, limit: int = 3) -> str:
         rows = cur.fetchall()
         if not rows:
             return ""
-
-        memory_context = "\n\n".join(
-            [f"User: {r['question']}\nBot: {r['answer']}" for r in reversed(rows)]
-        )
-        return f"Recent conversation history:\n{memory_context}\n\n"
+        memory = "\n\n".join([f"User: {r['question']}\nBot: {r['answer']}" for r in reversed(rows)])
+        return f"Recent conversation history:\n{memory}\n\n"
     except Exception as e:
-        print(f"[get_user_memory] ⚠️ Error fetching memory: {e}")
+        print(f"[get_user_memory] ⚠️ Error: {e}")
         return ""
 
 
 # ----------------------------------------------------
-# MAIN CHAT ENDPOINT
+# 🎫 UTILITY: Create ticket automatically
+# ----------------------------------------------------
+def create_ticket(conn, customer_id, issue_category, description):
+    """Create a new legal ticket and return ticket_id."""
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        INSERT INTO legal_tickets (customer_id, issue_category, description, status)
+        VALUES (%s, %s, %s, 'open')
+        RETURNING ticket_id;
+        """,
+        (customer_id, issue_category, description),
+    )
+    ticket = cur.fetchone()
+    conn.commit()
+    return str(ticket["ticket_id"])  # ✅ Convert UUID to string
+
+
+# ----------------------------------------------------
+# 💬 MAIN CHAT ENDPOINT
 # ----------------------------------------------------
 @router.post("/ask", response_model=ChatResponse)
 async def ask_chatbot(data: ChatRequest = Body(...)):
@@ -98,22 +139,16 @@ async def ask_chatbot(data: ChatRequest = Body(...)):
 
     try:
         conn = get_postgres_conn()
+        memory_context = get_user_memory(conn, data.session_id) if data.session_id else ""
 
-        # 🧠 Load recent context
-        memory_context = ""
-        if data.session_id:
-            memory_context = get_user_memory(conn, data.session_id)
+        issue_category = categorize_issue(data.query)
 
-        # 🔍 Detect RAG relevance vs general legal questions
         GENERAL_KEYWORDS = [
-            "kill", "murder", "loan", "crime", "divorce", "property",
-            "police", "tenant", "rights", "penalty", "court", "fine",
-            "arrest", "punishment", "lawyer", "contract", "case",
-            "bail", "default", "fraud",
+            "crime", "divorce", "property", "rights", "contract",
+            "court", "penalty", "fine", "bail", "fraud", "arrest"
         ]
-        is_general_query = any(w in data.query.lower() for w in GENERAL_KEYWORDS)
+        is_general = any(w in data.query.lower() for w in GENERAL_KEYWORDS)
 
-        # 🧩 Initialize retriever
         rag = RAGRetriever(
             postgres_conn=conn,
             kb_label=data.kb or settings.DEFAULT_KB,
@@ -125,37 +160,32 @@ async def ask_chatbot(data: ChatRequest = Body(...)):
             retrieval_mode = "LLM"
             docs, context, retrieval_score = [], "", 0.0
 
-            # Perform retrieval if not general
-            if not is_general_query:
+            if not is_general:
                 docs = await asyncio.to_thread(rag.retrieve, data.query, data.top_k)
                 retrieval_mode = "RAG"
                 if docs:
-                    sims = [float(d.get("similarity", 0)) for d in docs if "similarity" in d]
+                    sims = [float(d.get("similarity", 0)) for d in docs]
                     retrieval_score = round(sum(sims) / len(sims), 3) if sims else 0.7
-                    context = "\n\n".join(d.get("text", "") for d in docs if d.get("text"))
+                    context = "\n\n".join(d.get("text", "") for d in docs)
                 else:
                     context = "No relevant legal documents found."
             else:
                 context = "General legal knowledge question."
                 retrieval_score = 1.0
 
-            # Combine memory + new context
             full_context = (memory_context or "") + context
-
             prompt = (
                 f"Context:\n{full_context}\n\n"
                 f"User Query: {data.query}\n\n"
-                f"Task: Summarize or answer clearly and concisely based on legal context."
+                f"Task: Provide a clear, factual legal response or summary."
             )
 
-            # Call LLM safely
             answer, llm_conf = await asyncio.to_thread(safe_llm_answer, prompt, data.model)
             if not answer:
                 answer = "No answer generated. Please refine your question."
 
             final_conf = round(((llm_conf or 0.5) + retrieval_score) / 2, 3)
 
-            # Collect sources
             context_sources = [
                 {
                     "source": d.get("source"),
@@ -165,16 +195,23 @@ async def ask_chatbot(data: ChatRequest = Body(...)):
                 for d in docs
             ]
 
-            # Save chat to Postgres
+            ticket_id = None
+            if data.create_ticket or issue_category.lower() in ["criminal", "civil", "corporate"]:
+                ticket_id = create_ticket(conn, data.customer_id, issue_category, data.query)
+
             record = {
                 "chat_id": chat_id,
                 "session_id": data.session_id or "default",
-                "user_name": data.user_name or "Guest",
+                "customer_id": data.customer_id,
+                "customer_name": data.customer_name,
                 "question": data.query,
                 "answer": answer,
                 "confidence": final_conf,
                 "input_channel": data.input_channel or "web",
                 "retrieval_mode": retrieval_mode,
+                "knowledge_base": data.kb or settings.DEFAULT_KB,
+                "ticket_id": ticket_id,
+                "issue_category": issue_category,
             }
             await asyncio.to_thread(save_chat_to_postgres, record)
 
@@ -184,6 +221,8 @@ async def ask_chatbot(data: ChatRequest = Body(...)):
                 "retrieval_score": retrieval_score,
                 "context_sources": context_sources,
                 "retrieval_mode": retrieval_mode,
+                "ticket_id": ticket_id,
+                "issue_category": issue_category,
             }
 
         result = await asyncio.wait_for(run_pipeline(), timeout=60)
@@ -197,6 +236,8 @@ async def ask_chatbot(data: ChatRequest = Body(...)):
             context_sources=result["context_sources"],
             retrieval_mode=result["retrieval_mode"],
             feedback_prompt=True,
+            ticket_id=result["ticket_id"],
+            issue_category=result["issue_category"],
             response_time_ms=round((time.time() - start_time) * 1000, 2),
         )
 
@@ -210,7 +251,7 @@ async def ask_chatbot(data: ChatRequest = Body(...)):
 
 
 # ----------------------------------------------------
-# FEEDBACK ENDPOINT
+# 🗣 FEEDBACK ENDPOINT
 # ----------------------------------------------------
 @router.post("/feedback")
 async def record_feedback(data: FeedbackRequest):
@@ -221,10 +262,10 @@ async def record_feedback(data: FeedbackRequest):
         cur.execute(
             """
             UPDATE chat_history
-            SET feedback_option = %s
+            SET feedback_option = %s, feedback = %s
             WHERE chat_id = %s;
             """,
-            (data.feedback_option, data.chat_id),
+            (data.feedback_option, data.feedback_text, data.chat_id),
         )
         conn.commit()
         return {"success": True, "message": "Feedback recorded"}
@@ -238,59 +279,49 @@ async def record_feedback(data: FeedbackRequest):
 
 
 # ----------------------------------------------------
-# HISTORY ENDPOINT (session-aware)
+# 📜 CHAT HISTORY ENDPOINT
 # ----------------------------------------------------
 @router.get("/history")
 async def get_chat_history(
-    session_id: Optional[str] = Query(None, description="User session ID"),
-    user_name: Optional[str] = Query(None, description="Filter by user name"),
-    limit: int = Query(20, ge=1, le=100)
+    customer_id: Optional[str] = Query(None),
+    session_id: Optional[str] = Query(None),
+    ticket_id: Optional[str] = Query(None),  # ✅ updated
+    limit: int = Query(50, ge=1, le=500),
 ):
-    """
-    Returns recent chat history for the given session_id or user_name.
-    If both are absent, returns recent global history (for admin debugging).
-    """
+    """Return combined chat + ticket history."""
     conn = None
     try:
         conn = get_postgres_conn()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        if session_id:
-            cur.execute(
-                """
-                SELECT chat_id, session_id, user_name, question, answer,
-                       confidence, input_channel, retrieval_mode, created_at
-                FROM chat_history
-                WHERE session_id = %s
-                ORDER BY created_at DESC
-                LIMIT %s;
-                """,
-                (session_id, limit),
-            )
-        elif user_name:
-            cur.execute(
-                """
-                SELECT chat_id, session_id, user_name, question, answer,
-                       confidence, input_channel, retrieval_mode, created_at
-                FROM chat_history
-                WHERE user_name ILIKE %s
-                ORDER BY created_at DESC
-                LIMIT %s;
-                """,
-                (user_name, limit),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT chat_id, session_id, user_name, question, answer,
-                       confidence, input_channel, retrieval_mode, created_at
-                FROM chat_history
-                ORDER BY created_at DESC
-                LIMIT %s;
-                """,
-                (limit,),
-            )
+        base_query = """
+            SELECT ch.chat_id, ch.session_id, ch.customer_id, ch.customer_name,
+                   ch.question, ch.answer, ch.confidence, ch.input_channel,
+                   ch.retrieval_mode, ch.feedback, ch.issue_category, ch.created_at,
+                   lt.ticket_id, lt.assigned_lawyer, lt.status
+            FROM chat_history ch
+            LEFT JOIN legal_tickets lt ON ch.ticket_id = lt.ticket_id
+        """
+        where_clauses = []
+        params = []
 
+        if customer_id:
+            where_clauses.append("ch.customer_id = %s")
+            params.append(customer_id)
+        if session_id:
+            where_clauses.append("ch.session_id = %s")
+            params.append(session_id)
+        if ticket_id:
+            where_clauses.append("ch.ticket_id = %s")
+            params.append(ticket_id)
+
+        if where_clauses:
+            base_query += " WHERE " + " AND ".join(where_clauses)
+
+        base_query += " ORDER BY ch.created_at DESC LIMIT %s;"
+        params.append(limit)
+
+        cur.execute(base_query, params)
         rows = cur.fetchall()
         return {"success": True, "count": len(rows), "data": rows}
 

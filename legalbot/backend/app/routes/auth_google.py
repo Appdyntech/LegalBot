@@ -2,22 +2,32 @@
 auth_google.py
 Handles Google OAuth2 Login, Callback (redirects to frontend), and Token Verification for LegalBOT.
 """
+
+import os
+import time
+import jwt
+import httpx
+import logging
+from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from pydantic import BaseModel
-import jwt
-import time
-import httpx
-from urllib.parse import urlencode
-from .config import get_settings
+from uuid import uuid4
+
+# ✅ Updated imports for new structure
+from legalbot.backend.app.config import get_settings
+from legalbot.backend.app.db_postgres import get_postgres_conn
 
 # -----------------------------------------------------
 # INIT
 # -----------------------------------------------------
 settings = get_settings()
 router = APIRouter(prefix="/google", tags=["Google Auth"])
+
+logger = logging.getLogger("auth_google")
+logger.setLevel(logging.INFO)
 
 # -----------------------------------------------------
 # CONFIG
@@ -33,9 +43,7 @@ JWT_SECRET = getattr(settings, "JWT_SECRET_KEY", "supersecretjwt")
 JWT_ALGO = getattr(settings, "JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION = getattr(settings, "JWT_EXPIRATION_MINUTES", 60)
 
-# -----------------------------------------------------
-# MODELS
-# -----------------------------------------------------
+
 class TokenRequest(BaseModel):
     token: str
 
@@ -52,7 +60,8 @@ def create_jwt_token(email: str, name: str, picture: str = None):
         "iat": int(time.time()),
         "exp": int(time.time()) + (JWT_EXPIRATION * 60),
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+    return token
 
 
 # -----------------------------------------------------
@@ -70,7 +79,7 @@ async def google_login():
         "prompt": "consent",
     }
     url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
-    print(f"🔗 Redirecting user to: {url}")
+    logger.info(f"🔗 Redirecting user to: {url}")
     return RedirectResponse(url=url)
 
 
@@ -81,10 +90,11 @@ async def google_callback(request: Request):
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
-    print(f"📩 Received OAuth code: {code[:10]}...")
+    logger.info(f"📩 Received OAuth code: {code[:10]}...")
 
     try:
-        async with httpx.AsyncClient() as client:
+        # --- Exchange code for tokens ---
+        async with httpx.AsyncClient(timeout=10.0) as client:
             token_url = "https://oauth2.googleapis.com/token"
             data = {
                 "code": code,
@@ -99,6 +109,7 @@ async def google_callback(request: Request):
         if "id_token" not in token_data:
             raise HTTPException(status_code=400, detail=f"Invalid Google response: {token_data}")
 
+        # --- Verify ID token ---
         idinfo = id_token.verify_oauth2_token(
             token_data["id_token"], google_requests.Request(), GOOGLE_CLIENT_ID
         )
@@ -109,20 +120,49 @@ async def google_callback(request: Request):
 
         jwt_token = create_jwt_token(email=email, name=name, picture=picture)
 
-        # ✅ Redirect to frontend (dynamic from .env)
+        # --- Sync user in Postgres ---
+        try:
+            conn = get_postgres_conn()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO customers (customer_id, name, email, google_verified, auth_provider, active)
+                VALUES (%s, %s, %s, TRUE, 'google', TRUE)
+                ON CONFLICT (email) DO UPDATE
+                SET name = EXCLUDED.name,
+                    google_verified = TRUE,
+                    auth_provider = 'google',
+                    active = TRUE;
+                """,
+                (str(uuid4()), name, email),
+            )
+            conn.commit()
+            logger.info(f"✅ Google user synced: {email}")
+
+        except Exception as db_err:
+            logger.error(f"❌ DB sync failed for Google user {email}: {db_err}")
+            if conn:
+                conn.rollback()
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
+        # --- Redirect to frontend ---
         params = urlencode({
             "jwt": jwt_token,
             "email": email,
             "name": name,
-            "picture": picture,
+            "picture": picture or "",
         })
         redirect_url = f"{FRONTEND_REDIRECT_URI}?{params}"
-        print(f"🔁 Redirecting to frontend: {redirect_url}")
+        logger.info(f"🔁 Redirecting to frontend: {redirect_url}")
 
         return RedirectResponse(url=redirect_url)
 
     except Exception as e:
-        print("❌ [google_callback] Error:", e)
+        logger.error(f"❌ [google_callback] Error: {e}")
         raise HTTPException(status_code=500, detail=f"Google auth failed: {str(e)}")
 
 
@@ -133,13 +173,12 @@ async def verify_google_token(data: TokenRequest):
         idinfo = id_token.verify_oauth2_token(
             data.token, google_requests.Request(), GOOGLE_CLIENT_ID
         )
-
         email = idinfo.get("email")
         name = idinfo.get("name")
         picture = idinfo.get("picture")
 
         jwt_token = create_jwt_token(email=email, name=name, picture=picture)
-        print(f"✅ Verified Google token for {email}")
+        logger.info(f"✅ Verified Google token for {email}")
         return {
             "status": "verified",
             "email": email,
@@ -147,6 +186,7 @@ async def verify_google_token(data: TokenRequest):
             "picture": picture,
             "jwt": jwt_token,
         }
+
     except Exception as e:
-        print("❌ [verify_google_token] Error:", e)
+        logger.error(f"❌ [verify_google_token] Error: {e}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")

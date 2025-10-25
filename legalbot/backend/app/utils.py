@@ -1,86 +1,135 @@
 # backend/app/utils.py
 import os
 import datetime
-import json
 from typing import Dict, Any
 from .config import get_settings
 from .db_postgres import get_postgres_conn
 
 settings = get_settings()
 
+
 # --------------------------------------------------------------------
-# ✅ PostgreSQL Chat Logger (Main)
+# ✅ Unified PostgreSQL Chat Logger (Production)
 # --------------------------------------------------------------------
 def save_chat_to_postgres(entry: Dict[str, Any]):
     """
     Insert a chat record into PostgreSQL (table: chat_history).
-    Creates the table automatically if it doesn't exist.
+    Uses the full production schema with all relevant columns:
+    customer_id, customer_name, feedback, ticket linkage, etc.
     """
     conn = get_postgres_conn()
     if not conn:
-        print("[utils.save_chat_to_postgres] ❌ No DB connection — skipping save.")
+        print("[save_chat_to_postgres] ❌ No DB connection — skipping save.")
         return None
 
     try:
         cur = conn.cursor()
 
-        # Ensure the table exists
+        # ✅ Ensure schema alignment (only adds missing columns; does not recreate table)
         cur.execute("""
-        CREATE TABLE IF NOT EXISTS chat_history (
-            id SERIAL PRIMARY KEY,
-            chat_id VARCHAR(100) UNIQUE,
-            session_id VARCHAR(100),
-            user_name VARCHAR(100),
-            question TEXT,
-            answer TEXT,
-            confidence FLOAT,
-            input_channel VARCHAR(50),
-            retrieval_mode VARCHAR(50),
-            feedback_option VARCHAR(50),
-            created_at TIMESTAMP DEFAULT NOW()
-        );
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='chat_history' AND column_name='customer_id') THEN
+                ALTER TABLE chat_history ADD COLUMN customer_id UUID;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='chat_history' AND column_name='customer_name') THEN
+                ALTER TABLE chat_history ADD COLUMN customer_name VARCHAR(150);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='chat_history' AND column_name='feedback_option') THEN
+                ALTER TABLE chat_history ADD COLUMN feedback_option VARCHAR(50);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='chat_history' AND column_name='feedback') THEN
+                ALTER TABLE chat_history ADD COLUMN feedback TEXT;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='chat_history' AND column_name='issue_category') THEN
+                ALTER TABLE chat_history ADD COLUMN issue_category VARCHAR(150);
+            END IF;
+        END $$;
         """)
 
-        # Auto timestamp
-        timestamp = entry.get("timestamp") or datetime.datetime.utcnow().isoformat()
+        # ✅ Insert record
+        timestamp = entry.get("timestamp") or datetime.datetime.utcnow()
 
         cur.execute(
             """
             INSERT INTO chat_history (
-                chat_id, session_id, user_name, question, answer,
-                confidence, input_channel, retrieval_mode, feedback_option, created_at
+                chat_id,
+                session_id,
+                user_name,
+                customer_id,
+                customer_name,
+                question,
+                answer,
+                confidence,
+                input_channel,
+                retrieval_mode,
+                knowledge_base,
+                ticket_id,
+                issue_category,
+                feedback_option,
+                feedback,
+                created_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (
+                %(chat_id)s,
+                %(session_id)s,
+                %(user_name)s,
+                %(customer_id)s,
+                %(customer_name)s,
+                %(question)s,
+                %(answer)s,
+                %(confidence)s,
+                %(input_channel)s,
+                %(retrieval_mode)s,
+                %(knowledge_base)s,
+                %(ticket_id)s,
+                %(issue_category)s,
+                %(feedback_option)s,
+                %(feedback)s,
+                %(created_at)s
+            )
             ON CONFLICT (chat_id) DO NOTHING;
             """,
-            (
-                entry.get("chat_id"),
-                entry.get("session_id") or "default",
-                entry.get("user_name") or "Guest",
-                entry.get("question"),
-                entry.get("answer"),
-                entry.get("confidence", 0.0),
-                entry.get("input_channel", "web"),
-                entry.get("retrieval_mode", "LLM"),
-                entry.get("feedback_option", None),
-                timestamp,
-            ),
+            {
+                "chat_id": entry.get("chat_id"),
+                "session_id": entry.get("session_id", "default"),
+                "user_name": entry.get("user_name", entry.get("customer_name", "Guest")),
+                "customer_id": entry.get("customer_id"),
+                "customer_name": entry.get("customer_name"),
+                "question": entry.get("question"),
+                "answer": entry.get("answer"),
+                "confidence": entry.get("confidence", 0.0),
+                "input_channel": entry.get("input_channel", "web"),
+                "retrieval_mode": entry.get("retrieval_mode", "LLM"),
+                "knowledge_base": entry.get("knowledge_base", "default"),
+                "ticket_id": entry.get("ticket_id"),
+                "issue_category": entry.get("issue_category"),
+                "feedback_option": entry.get("feedback_option"),
+                "feedback": entry.get("feedback"),
+                "created_at": timestamp,
+            },
         )
 
         conn.commit()
-        cur.close()
-        print(f"[save_chat_to_postgres] ✅ Saved chat {entry.get('chat_id')} to Postgres")
+        print(f"[save_chat_to_postgres] ✅ Saved chat {entry.get('chat_id')} to chat_history")
 
     except Exception as e:
         print(f"[save_chat_to_postgres] ❌ Error saving chat: {e}")
+        conn.rollback()
+
     finally:
         conn.close()
 
 
 # --------------------------------------------------------------------
-# 🧩 Feedback Updater
+# 🧩 Feedback Updater (robust)
 # --------------------------------------------------------------------
-def update_feedback(chat_id: str, feedback_option: str):
+def update_feedback(chat_id: str, feedback_option: str, feedback_text: str = None):
     """Update feedback for a chat record."""
     conn = get_postgres_conn()
     if not conn:
@@ -92,17 +141,18 @@ def update_feedback(chat_id: str, feedback_option: str):
         cur.execute(
             """
             UPDATE chat_history
-            SET feedback_option = %s
-            WHERE chat_id = %s;
+            SET feedback_option = %s,
+                feedback = %s
+            WHERE chat_id::text = %s;
             """,
-            (feedback_option, chat_id),
+            (feedback_option, feedback_text, str(chat_id)),
         )
         conn.commit()
-        cur.close()
-        print(f"[update_feedback] ✅ Feedback '{feedback_option}' updated for chat_id={chat_id}")
+        print(f"[update_feedback] ✅ Feedback updated for chat_id={chat_id}")
         return True
     except Exception as e:
         print(f"[update_feedback] ❌ Error updating feedback: {e}")
+        conn.rollback()
         return False
     finally:
         conn.close()
@@ -113,6 +163,8 @@ def update_feedback(chat_id: str, feedback_option: str):
 # --------------------------------------------------------------------
 def send_whatsapp_via_twilio(to_number: str, body: str):
     """Send WhatsApp message using Twilio API."""
+    from twilio.rest import Client
+
     tw_sid = settings.TWILIO_ACCOUNT_SID
     tw_token = settings.TWILIO_AUTH_TOKEN
     from_wh = settings.TWILIO_WHATSAPP_NUMBER
@@ -122,7 +174,6 @@ def send_whatsapp_via_twilio(to_number: str, body: str):
         return False
 
     try:
-        from twilio.rest import Client
         client = Client(tw_sid, tw_token)
         message = client.messages.create(
             body=body,

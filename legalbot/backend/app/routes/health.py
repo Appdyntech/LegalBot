@@ -1,59 +1,53 @@
-# backend/app/routes/health.py
-from fastapi import APIRouter
-from ..db_postgres import get_postgres_conn
-from ..config import get_settings
-from pymongo import MongoClient
+# app/routes/health.py
+"""
+System Health Route — Checks PostgreSQL connectivity and reports uptime.
+"""
+
 import time
+from fastapi import APIRouter
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from ..config import get_settings
+from ..db_postgres import get_postgres_conn
 
 router = APIRouter(tags=["System Health"])
-
 settings = get_settings()
 START_TIME = time.time()
+
+
+def check_postgres():
+    """Verify PostgreSQL connection."""
+    try:
+        conn = get_postgres_conn()
+        if conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+            conn.close()
+            return {"ok": True, "error": None}
+        else:
+            return {"ok": False, "error": "No connection returned."}
+    except SQLAlchemyError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 @router.get("/")
 async def health_check():
     """
     Health check endpoint.
-    Verifies PostgreSQL and MongoDB connectivity,
-    reports uptime and backend version.
+    Verifies PostgreSQL connectivity, reports uptime and backend version.
     """
-    mongo_status = False
-    postgres_status = False
-    mongo_error = None
-    postgres_error = None
-
-    # MongoDB Check
-    try:
-        if settings.MONGO_URI:
-            client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=1000)
-            client.server_info()  # forces connection
-            mongo_status = True
-            print("[health] ✅ MongoDB connection OK")
-    except Exception as e:
-        mongo_error = str(e)
-        print(f"[health] ⚠️ MongoDB connection failed: {e}")
-
-    # PostgreSQL Check
-    try:
-        conn = get_postgres_conn()
-        if conn:
-            postgres_status = True
-            conn.close()
-            print("[health] ✅ PostgreSQL connection OK")
-    except Exception as e:
-        postgres_error = str(e)
-        print(f"[health] ⚠️ PostgreSQL connection failed: {e}")
-
-    # Calculate uptime
+    postgres_status = check_postgres()
     uptime_seconds = round(time.time() - START_TIME, 2)
 
+    overall_status = "ok" if postgres_status["ok"] else "error"
+
     return {
-        "status": "ok" if (mongo_status or postgres_status) else "error",
+        "status": overall_status,
         "version": "3.6",
         "uptime_seconds": uptime_seconds,
         "services": {
-            "mongo": {"ok": mongo_status, "error": mongo_error},
-            "postgres": {"ok": postgres_status, "error": postgres_error},
+            "postgres": postgres_status
         },
     }

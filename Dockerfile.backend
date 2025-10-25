@@ -1,16 +1,11 @@
 # ==============================
 # 🚀 Backend Dockerfile (FastAPI)
 # ==============================
-
 FROM python:3.11-slim
 
-# Set work directory
 WORKDIR /app
 
-# Copy backend source
-COPY legalbot/backend /app
-
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     netcat-openbsd \
@@ -21,8 +16,12 @@ COPY legalbot/backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Expose backend port
+# Copy backend source
+COPY legalbot/backend /app
+
+# Copy environment file (Render ignores this if using envVars)
+COPY legalbot/backend/.env.gcp /app/.env
+
 EXPOSE 8705
 
-# Run FastAPI app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]

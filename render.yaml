@@ -1,6 +1,6 @@
 services:
   # ===========================
-  # 🚀 Backend (FastAPI)
+  # 🚀 Backend (FastAPI + Cloud SQL)
   # ===========================
   - type: web
     name: legalbot-backend
@@ -9,39 +9,49 @@ services:
     dockerfilePath: ./Dockerfile.backend
     autoDeploy: true
     envVars:
-      # Environment
+      # ==========================
+      # App Environment
+      # ==========================
       - key: APP_ENV
         value: prod
 
-      # Database Connection (Render Managed DB)
+      # ==========================
+      # Database (Cloud SQL)
+      # ==========================
       - key: POSTGRES_HOST
-        fromDatabase:
-          name: legalbot-db
-          property: host
+        value: 34.93.244.73
       - key: POSTGRES_PORT
-        fromDatabase:
-          name: legalbot-db
-          property: port
+        value: 5432
       - key: POSTGRES_DB
-        fromDatabase:
-          name: legalbot-db
-          property: database
+        value: legal_chunks_db_v2
       - key: POSTGRES_USER
-        fromDatabase:
-          name: legalbot-db
-          property: user
+        value: legalbot_user
       - key: POSTGRES_PASSWORD
-        fromDatabase:
-          name: legalbot-db
-          property: password
+        value: Google@123
+      - key: DB_URL
+        value: postgresql+psycopg2://legalbot_user:Google%40123@34.93.244.73:5432/legal_chunks_db_v2
 
-      # URLs & Auth
+      # ==========================
+      # URLs
+      # ==========================
       - key: FRONTEND_URL
-        value: https://legalbot-frontend.onrender.com
-      - key: GOOGLE_REDIRECT_URI
-        value: https://legalbot-backend.onrender.com/api/v1/auth/google/callback
+        value: https://legalbot-frontend-fajw.onrender.com
+      - key: BACKEND_URL
+        value: https://legalbot-backend-ew4x.onrender.com
 
-      # JWT
+      # ==========================
+      # Google OAuth (Handled via Render Dashboard)
+      # ==========================
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://legalbot-backend-ew4x.onrender.com/api/v1/auth/google/callback
+
+      # ==========================
+      # JWT Config
+      # ==========================
       - key: JWT_SECRET_KEY
         value: supersecretkey123
       - key: JWT_ALGORITHM
@@ -49,16 +59,18 @@ services:
       - key: JWT_EXPIRATION_MINUTES
         value: "60"
 
-      # AI Keys (manually add on Render Dashboard)
+      # ==========================
+      # LLM Config
+      # ==========================
       - key: OPENAI_API_KEY
         sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
 
     healthCheckPath: /api/v1/health/
 
   # ===========================
-  # 💻 Frontend (Vite / React)
+  # 💻 Frontend (React / Vite + Nginx)
   # ===========================
   - type: web
     name: legalbot-frontend
@@ -67,7 +79,34 @@ services:
     dockerfilePath: ./Dockerfile.frontend
     autoDeploy: true
     envVars:
+      # ==========================
+      # App Environment
+      # ==========================
+      - key: APP_ENV
+        value: prod
+
+      # ==========================
+      # Frontend Config
+      # ==========================
       - key: VITE_API_BASE_URL
-        value: https://legalbot-backend.onrender.com/api/v1
-    buildCommand: |
-      echo "🚀 Building frontend with VITE_API_BASE_URL=$VITE_API_BASE_URL"
+        value: https://legalbot-backend-ew4x.onrender.com/api/v1
+      - key: VITE_FRONTEND_URL
+        value: https://legalbot-frontend-fajw.onrender.com
+
+      # ==========================
+      # Google Auth Config
+      # ==========================
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false
+      - key: VITE_GOOGLE_REDIRECT_URI
+        value: https://legalbot-backend-ew4x.onrender.com/api/v1/auth/google/callback
+
+      # ==========================
+      # Cache / Versioning
+      # ==========================
+      - key: CACHE_BUST
+        value: oct25-final
+
+    buildFilter:
+      paths:
+        - legalbot/web/**

@@ -1,10 +1,10 @@
-// web/src/components/ChatBox.tsx
+﻿// web/src/components/ChatBox.tsx
 import React, { useState, useRef, useEffect } from "react";
 import { sendChat } from "../api/chat";
 import api from "../api/apiClient";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
+  import.meta.env.VITE_API_BASE_URL || "${import.meta.env.VITE_API_BASE_URL}";
 
 interface HistoryItem {
   id?: number;
@@ -26,7 +26,7 @@ export default function ChatBox() {
   const [showFeedback, setShowFeedback] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // ✅ Persistent session using localStorage
+  // âœ… Persistent session using localStorage
   const [sessionId] = useState(() => {
     const existing = localStorage.getItem("session_id");
     if (existing) return existing;
@@ -35,7 +35,7 @@ export default function ChatBox() {
     return newId;
   });
 
-  // 🧠 Load chat history for this session only
+  // ðŸ§  Load chat history for this session only
   useEffect(() => {
     const loadHistory = async () => {
       try {
@@ -52,18 +52,18 @@ export default function ChatBox() {
         }
       } catch (err) {
         console.error("Error loading chat history:", err);
-        setError("⚠️ Unable to load previous chat history.");
+        setError("âš ï¸ Unable to load previous chat history.");
       }
     };
     loadHistory();
   }, [sessionId]);
 
-  // 🧭 Auto scroll on new messages
+  // ðŸ§­ Auto scroll on new messages
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 🎤 Voice input setup
+  // ðŸŽ¤ Voice input setup
   useEffect(() => {
     if ("webkitSpeechRecognition" in window) {
       const SpeechRecognition =
@@ -82,7 +82,7 @@ export default function ChatBox() {
     }
   }, []);
 
-  // 🚀 Send chat message
+  // ðŸš€ Send chat message
   const handleSend = async (voiceQuery?: string) => {
     const question = voiceQuery || query.trim();
     if (!question) return;
@@ -112,19 +112,19 @@ export default function ChatBox() {
       setQuery("");
     } catch (err) {
       console.error("Chat API error:", err);
-      setError("❌ Failed to fetch response from LegalBOT API.");
+      setError("âŒ Failed to fetch response from LegalBOT API.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 🎙️ Voice input handler
+  // ðŸŽ™ï¸ Voice input handler
   const handleVoiceInput = () => {
     if (recognition) recognition.start();
-    else alert("🎙️ Voice input not supported in this browser.");
+    else alert("ðŸŽ™ï¸ Voice input not supported in this browser.");
   };
 
-  // 📝 Feedback handling
+  // ðŸ“ Feedback handling
   const handleFeedback = async (option: "satisfied" | "need_assistance") => {
     if (!showFeedback) return;
     setShowFeedback(null);
@@ -152,28 +152,28 @@ export default function ChatBox() {
         });
 
         alert(
-          `✅ Ticket created successfully!\nTicket ID: ${resp.data.ticket_id}\nStatus: ${resp.data.status}`
+          `âœ… Ticket created successfully!\nTicket ID: ${resp.data.ticket_id}\nStatus: ${resp.data.status}`
         );
       } else {
-        alert("✅ Thanks for your feedback!");
+        alert("âœ… Thanks for your feedback!");
       }
     } catch (err) {
-      console.error("❌ Feedback/Ticket Error:", err);
-      alert("⚠️ Failed to record feedback or create ticket.");
+      console.error("âŒ Feedback/Ticket Error:", err);
+      alert("âš ï¸ Failed to record feedback or create ticket.");
     }
   };
 
   return (
     <div className="flex flex-col h-[90vh] max-w-4xl mx-auto border rounded-lg shadow-md p-4 bg-white">
       <h2 className="text-xl font-semibold text-center mb-4">
-        ⚖️ LegalBOT AI Assistant
+        âš–ï¸ LegalBOT AI Assistant
       </h2>
 
       {/* Chat Window */}
       <div className="flex-1 overflow-y-auto border p-3 rounded-md bg-gray-50">
         {messages.length === 0 && (
           <p className="text-center text-gray-500 italic mt-4">
-            💬 Start a conversation by typing your legal question below.
+            ðŸ’¬ Start a conversation by typing your legal question below.
           </p>
         )}
 
@@ -189,7 +189,7 @@ export default function ChatBox() {
             <p>{msg.text}</p>
             {msg.role === "bot" && msg.confidence !== undefined && (
               <p className="text-xs text-gray-500 mt-1">
-                🔍 Confidence: {msg.confidence?.toFixed(2)}
+                ðŸ” Confidence: {msg.confidence?.toFixed(2)}
               </p>
             )}
           </div>
@@ -199,20 +199,20 @@ export default function ChatBox() {
         {showFeedback && (
           <div className="mt-4 p-3 bg-yellow-50 border rounded-md text-center">
             <p className="font-medium mb-2">
-              🤔 Was your query answered satisfactorily?
+              ðŸ¤” Was your query answered satisfactorily?
             </p>
             <div className="flex justify-center gap-4">
               <button
                 onClick={() => handleFeedback("satisfied")}
                 className="bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600"
               >
-                ✅ Yes
+                âœ… Yes
               </button>
               <button
                 onClick={() => handleFeedback("need_assistance")}
                 className="bg-red-500 text-white px-3 py-2 rounded-md hover:bg-red-600"
               >
-                ⚖️ Need Lawyer
+                âš–ï¸ Need Lawyer
               </button>
             </div>
           </div>
@@ -242,7 +242,7 @@ export default function ChatBox() {
           className="bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600"
           title="Voice Input"
         >
-          🎤
+          ðŸŽ¤
         </button>
         <button
           onClick={() => handleSend()}
@@ -255,3 +255,4 @@ export default function ChatBox() {
     </div>
   );
 }
+

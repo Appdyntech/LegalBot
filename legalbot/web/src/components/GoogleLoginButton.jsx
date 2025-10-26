@@ -1,11 +1,11 @@
-// src/components/GoogleLoginButton.jsx
+﻿// src/components/GoogleLoginButton.jsx
 import React from "react";
 import { Button } from "@mui/material";
 import GoogleIcon from "@mui/icons-material/Google";
 
 const GoogleLoginButton = () => {
   const handleGoogleLogin = () => {
-    window.location.href = "http://127.0.0.1:8705/api/v1/auth/google/login";
+    window.location.href = "${import.meta.env.VITE_API_BASE_URL}/auth/google/login";
   };
 
   return (
@@ -27,3 +27,4 @@ const GoogleLoginButton = () => {
 };
 
 export default GoogleLoginButton;
+

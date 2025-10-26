@@ -5,7 +5,7 @@ const ChatHistory = () => {
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8705/api/v1/chat/history?limit=50")
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/chat/history?limit=50`)
       .then((res) => res.json())
       .then((data) => setHistory(data.data || []))
       .catch((err) => console.error("Error loading chat history:", err));

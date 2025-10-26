@@ -1,7 +1,7 @@
 // web/src/api/customerApi.ts
 import axios, { AxiosResponse } from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
+const API_BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/customers`;
 const CUSTOMER_API = `${API_BASE_URL}/customers`;
 
 export interface CustomerRegister {

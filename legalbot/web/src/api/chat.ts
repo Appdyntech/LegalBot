@@ -1,6 +1,6 @@
-// web/src/api/chat.ts
+﻿// web/src/api/chat.ts
 // A small, robust wrapper to call your backend /chat endpoints
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "${import.meta.env.VITE_API_BASE_URL}";
 
 /**
  * Types (lightweight)
@@ -37,7 +37,7 @@ export async function sendChatQuestion(
   }
 ): Promise<ChatResponse> {
   const endpoint = `${API_BASE_URL}/chat/ask`;
-  console.log("📡 POST ->", endpoint);
+  console.log("ðŸ“¡ POST ->", endpoint);
 
   const payload: ChatReq = {
     query,
@@ -57,21 +57,21 @@ export async function sendChatQuestion(
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "<no body>");
-      console.error(`❌ Backend returned ${res.status}:`, txt);
+      console.error(`âŒ Backend returned ${res.status}:`, txt);
       throw new Error(`Backend ${res.status}: ${txt}`);
     }
 
     const data = await res.json();
-    console.log("✅ chat response:", data);
+    console.log("âœ… chat response:", data);
     return data as ChatResponse;
   } catch (err) {
-    console.error("⚠️ sendChatQuestion failed:", err);
+    console.error("âš ï¸ sendChatQuestion failed:", err);
     throw err;
   }
 }
 
 /**
- * Legacy alias — maintains compatibility
+ * Legacy alias â€” maintains compatibility
  */
 export const sendChat = async (payloadOrQuestion: any, maybeSessionId?: string) => {
   if (typeof payloadOrQuestion === "string") {
@@ -99,18 +99,19 @@ export const sendChat = async (payloadOrQuestion: any, maybeSessionId?: string) 
 export async function getChatHistory(session_id: string) {
   try {
     const endpoint = `${API_BASE_URL}/chat/history?session_id=${encodeURIComponent(session_id)}&limit=20`;
-    console.log("📜 GET ->", endpoint);
+    console.log("ðŸ“œ GET ->", endpoint);
     const res = await fetch(endpoint);
     if (!res.ok) {
       const txt = await res.text().catch(() => "<no body>");
-      console.error("❌ history error:", res.status, txt);
+      console.error("âŒ history error:", res.status, txt);
       throw new Error(`Failed to load chat history (${res.status}): ${txt}`);
     }
     const payload = await res.json();
-    console.log("✅ history loaded:", payload);
+    console.log("âœ… history loaded:", payload);
     return payload;
   } catch (err) {
-    console.error("⚠️ Failed to fetch chat history:", err);
+    console.error("âš ï¸ Failed to fetch chat history:", err);
     return { success: false, data: [] };
   }
 }
+

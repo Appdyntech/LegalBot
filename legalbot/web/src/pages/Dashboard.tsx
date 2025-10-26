@@ -44,7 +44,8 @@ const Dashboard: React.FC = () => {
     // Fetch lawyers
     const fetchLawyers = async () => {
       try {
-        const res = await axios.get("http://127.0.0.1:8705/api/v1/lawyers", {
+        const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/lawyers`);
+        {
           headers: { Authorization: `Bearer ${token}` },
         });
         setLawyers(res.data.lawyers || []);

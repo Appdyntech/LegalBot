@@ -17,8 +17,8 @@ from pydantic import BaseModel
 from uuid import uuid4
 
 # ✅ Updated imports for new structure
-from legalbot.backend.app.config import get_settings
-from legalbot.backend.app.db_postgres import get_postgres_conn
+from app.config import get_settings
+from app.db_postgres import get_postgres_conn
 
 # -----------------------------------------------------
 # INIT

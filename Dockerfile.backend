@@ -1,5 +1,5 @@
 # ==============================
-# 🚀 Backend Dockerfile (FastAPI - LegalBot)
+# 🚀 Backend Dockerfile (FastAPI - LegalBot with Cloud SQL Proxy)
 # ==============================
 
 FROM python:3.11-slim
@@ -12,6 +12,7 @@ WORKDIR /app
 # ------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    curl \
     netcat-openbsd \
  && rm -rf /var/lib/apt/lists/*
 
@@ -25,26 +26,32 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # ------------------------------
-# 🧠 Application source code
+# 📁 Application source code
 # ------------------------------
-# Copy backend source into the container
 COPY legalbot/backend /app
 
 # ------------------------------
-# ⚙️ Environment
+# 🔐 Install Cloud SQL Auth Proxy
 # ------------------------------
-# (Render injects envVars automatically from render.yaml or dashboard)
-# No .env files are copied to keep secrets out of the image
+RUN curl -o /cloud-sql-proxy https://dl.google.com/cloudsql/cloud-sql-proxy.linux.amd64 && \
+    chmod +x /cloud-sql-proxy
 
 # ------------------------------
-# 🌐 Expose port & start FastAPI
+# ⚙️ Environment setup
+# ------------------------------
+# Render injects environment variables automatically from render.yaml
+# No .env files are copied to keep secrets secure
+
+# ------------------------------
+# 🌐 Expose FastAPI port
 # ------------------------------
 EXPOSE 8705
 
-# Healthcheck (Render uses /api/v1/health automatically)
-HEALTHCHECK CMD curl --fail http://localhost:8705/api/v1/health || exit 1
-
 # ------------------------------
-# 🚀 Run the application
+# 🧠 Start both Cloud SQL Proxy + FastAPI together
 # ------------------------------
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]
+# The Cloud SQL instance connection name should match your actual instance:
+# e.g. legalcbot:asia-south1:legalbot-postgres
+# It runs in the background and listens on localhost:5432
+CMD /cloud-sql-proxy legalcbot:asia-south1:legalbot-postgres --port 5432 & \
+    uvicorn app.main:app --host 0.0.0.0 --port 8705

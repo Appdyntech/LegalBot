@@ -1,7 +1,8 @@
 # legalbot/web/src/utils/db_utils.py
 import psycopg2
 import pandas as pd
-from legalbot.backend.app.config import get_settings
+from app.config import get_settings
+
 
 settings = get_settings()
 

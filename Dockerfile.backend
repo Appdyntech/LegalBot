@@ -1,27 +1,50 @@
 # ==============================
-# 🚀 Backend Dockerfile (FastAPI)
+# 🚀 Backend Dockerfile (FastAPI - LegalBot)
 # ==============================
+
 FROM python:3.11-slim
 
+# Set working directory inside container
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# ------------------------------
+# 🧩 System dependencies
+# ------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     netcat-openbsd \
  && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file and install
+# ------------------------------
+# 📦 Python dependencies
+# ------------------------------
+# Copy requirements separately to leverage Docker layer caching
 COPY legalbot/backend/requirements.txt ./requirements.txt
+
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy backend source
+# ------------------------------
+# 🧠 Application source code
+# ------------------------------
+# Copy backend source into the container
 COPY legalbot/backend /app
 
-# Copy environment file (Render ignores this if using envVars)
-COPY legalbot/backend/.env.gcp /app/.env
+# ------------------------------
+# ⚙️ Environment
+# ------------------------------
+# (Render injects envVars automatically from render.yaml or dashboard)
+# No .env files are copied to keep secrets out of the image
 
+# ------------------------------
+# 🌐 Expose port & start FastAPI
+# ------------------------------
 EXPOSE 8705
 
+# Healthcheck (Render uses /api/v1/health automatically)
+HEALTHCHECK CMD curl --fail http://localhost:8705/api/v1/health || exit 1
+
+# ------------------------------
+# 🚀 Run the application
+# ------------------------------
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8705"]

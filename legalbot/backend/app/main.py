@@ -15,8 +15,8 @@ from sqlalchemy import create_engine, text
 # =====================================================
 # ✅ FIXED IMPORT PATHS FOR NESTED PACKAGE STRUCTURE
 # =====================================================
-from legalbot.backend.app.config import get_settings
-from legalbot.backend.app.db_postgres import get_postgres_conn, auto_close_stale_tickets
+from app.config import get_settings
+from app.db_postgres import get_postgres_conn, auto_close_stale_tickets
 
 # =====================================================
 # 🧱 LOGGING & SETTINGS
@@ -178,8 +178,8 @@ else:
 # =====================================================
 # 📦 ROUTES REGISTRATION
 # =====================================================
-from legalbot.backend.app.routes.auth_google import router as google_auth_router
-from legalbot.backend.app.routes import (
+from app.routes.auth_google import router as google_auth_router
+from app.routes import (
     chat,
     classify,
     customer,

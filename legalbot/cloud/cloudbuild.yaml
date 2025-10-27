@@ -1,0 +1,46 @@
+steps:
+  # Step 1: Build FastAPI backend Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/legalbot/legalbot-backend',
+        '-f', 'Dockerfile.backend',
+        '.'
+      ]
+
+  # Step 2: Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'push',
+        'us-central1-docker.pkg.dev/$PROJECT_ID/legalbot/legalbot-backend'
+      ]
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      [
+        'run','deploy','legalbot-backend',
+        '--image','us-central1-docker.pkg.dev/$PROJECT_ID/legalbot/legalbot-backend',
+        '--platform','managed',
+        '--region','asia-south1',
+        '--allow-unauthenticated',
+        '--port','8705',
+        '--memory','1Gi',
+        '--cpu','1',
+        '--set-env-vars',
+        'APP_ENV=prod,POSTGRES_HOST=/cloudsql/legalcbot:asia-south1:legalbot-db,POSTGRES_PORT=5432,POSTGRES_DB=legal_chunks_db,POSTGRES_USER=postgres,POSTGRES_PASSWORD=Google@123,FRONTEND_URL=https://legalbot.web.app,BACKEND_URL=https://legalbot-backend-asia-south1.a.run.app'
+      ]
+    secretEnv: ['OPENAI_API_KEY']
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/OPENAI_API_KEY/versions/latest
+      env: 'OPENAI_API_KEY'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/legalbot/legalbot-backend'
+
+timeout: 1200s

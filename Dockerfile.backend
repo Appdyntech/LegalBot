@@ -29,9 +29,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy the full legalbot backend structure
 COPY legalbot /app/legalbot
 
-# Copy environment file for local dev (used in config.py)
-COPY legalbot/backend/.env.local /app/legalbot/.env.local
-
 # ------------------------------
 # 🔐 Cloud SQL Auth Proxy (latest stable v2)
 # ------------------------------

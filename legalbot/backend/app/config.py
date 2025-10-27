@@ -3,34 +3,18 @@ from dotenv import load_dotenv
 from pathlib import Path
 from typing import Optional
 from functools import lru_cache
+from urllib.parse import unquote_plus
 
 # ----------------------------------------------------
 # 🌍 Dynamic Environment Loader (local vs cloud)
 # ----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parents[1]
-
-# Detect environment mode
 APP_ENV = os.getenv("APP_ENV", "dev").lower()
-
-# Select which .env file to load
-if APP_ENV == "prod":
-    ENV_PATH = BASE_DIR / ".env.gcp"
-else:
-    ENV_PATH = BASE_DIR / ".env"
-
-# Load environment variables
+ENV_PATH = BASE_DIR / (".env.local.gcp" if APP_ENV == "prod" else ".env.local")
 loaded = load_dotenv(dotenv_path=ENV_PATH, override=True)
 print(f"🔍 Loading environment from: {ENV_PATH} (success={loaded}) — MODE: {APP_ENV.upper()}")
 
-
 class Settings:
-    # ----------------------------
-    # MongoDB
-    # ----------------------------
-    MONGO_URI: Optional[str] = os.getenv("MONGO_URI", "")
-    MONGO_DB: Optional[str] = os.getenv("MONGO_DB", "digitized_docs_db")
-    MONGO_COLLECTION: Optional[str] = os.getenv("MONGO_COLLECTION", "digitized_docs")
-
     # ----------------------------
     # PostgreSQL
     # ----------------------------
@@ -38,25 +22,14 @@ class Settings:
     POSTGRES_PORT: Optional[str] = os.getenv("POSTGRES_PORT", "5432")
     POSTGRES_DB: Optional[str] = os.getenv("POSTGRES_DB", "legalbot")
     POSTGRES_USER: Optional[str] = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD: Optional[str] = os.getenv("POSTGRES_PASSWORD", "")
+    # Automatically decode URL-encoded passwords (e.g., %40 -> @)
+    POSTGRES_PASSWORD: Optional[str] = unquote_plus(os.getenv("POSTGRES_PASSWORD", ""))
 
     # ----------------------------
     # OpenAI / LLM
     # ----------------------------
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL: Optional[str] = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-
-    # ----------------------------
-    # Local LLM (optional)
-    # ----------------------------
-    LOCAL_LLM_PATH: Optional[str] = os.getenv("LOCAL_LLM_PATH", "")
-
-    # ----------------------------
-    # Twilio / WhatsApp
-    # ----------------------------
-    TWILIO_ACCOUNT_SID: Optional[str] = os.getenv("TWILIO_ACCOUNT_SID", "")
-    TWILIO_AUTH_TOKEN: Optional[str] = os.getenv("TWILIO_AUTH_TOKEN", "")
-    TWILIO_WHATSAPP_NUMBER: Optional[str] = os.getenv("TWILIO_WHATSAPP_NUMBER", "")
 
     # ----------------------------
     # Google OAuth
@@ -73,12 +46,6 @@ class Settings:
     JWT_SECRET_KEY: Optional[str] = os.getenv("JWT_SECRET_KEY", "supersecretkey123")
     JWT_ALGORITHM: Optional[str] = os.getenv("JWT_ALGORITHM", "HS256")
     JWT_EXPIRATION_MINUTES: int = int(os.getenv("JWT_EXPIRATION_MINUTES", "60"))
-
-    # ----------------------------
-    # App Defaults
-    # ----------------------------
-    DEFAULT_KB: Optional[str] = os.getenv("DEFAULT_KB", "digitized_docs")
-    CHAT_CSV_PATH: Optional[str] = os.getenv("CHAT_CSV_PATH", "chat_history.csv")
 
     # ----------------------------
     # Frontend URLs

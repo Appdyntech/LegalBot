@@ -7,6 +7,7 @@ import logging
 import sys
 import os
 import asyncio
+from urllib.parse import quote_plus
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -74,7 +75,7 @@ app.add_middleware(
 logger.info(f"✅ CORS enabled for: {', '.join(frontend_origins)}")
 
 # =====================================================
-# 🗄️ DATABASE CONNECTION CHECK
+# 🗄️ DATABASE CONNECTION CHECK (with safe password)
 # =====================================================
 try:
     conn = get_postgres_conn()
@@ -87,35 +88,33 @@ except Exception as e:
 # =====================================================
 # 🧩 DATABASE SCHEMA VALIDATION / CREATION (DEV ONLY)
 # =====================================================
+# Safely encode password in case it contains special characters like '@'
+safe_password = quote_plus(settings.POSTGRES_PASSWORD)
+
 DATABASE_URL = (
-    f"postgresql+psycopg2://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+    f"postgresql+psycopg2://{settings.POSTGRES_USER}:{safe_password}"
     f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
 )
+
 engine = create_engine(DATABASE_URL, echo=False)
 
 def ensure_table_schema():
     """Ensures all required tables and columns exist in the database."""
     with engine.connect() as conn:
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS chat_history (
-                chat_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                session_id VARCHAR(100),
+            CREATE TABLE IF NOT EXISTS legal_tickets (
+                ticket_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 customer_id UUID,
-                customer_name VARCHAR(150),
-                question TEXT,
-                answer TEXT,
-                knowledge_base VARCHAR(100),
-                model_used VARCHAR(100),
-                confidence NUMERIC,
-                retrieval_time FLOAT,
-                input_channel VARCHAR(50),
-                feedback_option VARCHAR(50),
-                feedback TEXT,
-                ticket_id UUID REFERENCES legal_tickets(ticket_id) ON DELETE SET NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                issue_category VARCHAR(150),
+                description TEXT,
+                assigned_lawyer VARCHAR(150),
+                status VARCHAR(50) DEFAULT 'open',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closure_comment TEXT
             );
         """))
-        logger.info("🧩 chat_history table verified or created (UUID ticket_id).")
+        logger.info("🎟️ legal_tickets table verified or created (UUID PK).")
 
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS customers (
@@ -149,19 +148,25 @@ def ensure_table_schema():
         logger.info("⚖️ lawyers table verified or created.")
 
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS legal_tickets (
-                ticket_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            CREATE TABLE IF NOT EXISTS chat_history (
+                chat_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                session_id VARCHAR(100),
                 customer_id UUID,
-                issue_category VARCHAR(150),
-                description TEXT,
-                assigned_lawyer VARCHAR(150),
-                status VARCHAR(50) DEFAULT 'open',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                closure_comment TEXT
+                customer_name VARCHAR(150),
+                question TEXT,
+                answer TEXT,
+                knowledge_base VARCHAR(100),
+                model_used VARCHAR(100),
+                confidence NUMERIC,
+                retrieval_time FLOAT,
+                input_channel VARCHAR(50),
+                feedback_option VARCHAR(50),
+                feedback TEXT,
+                ticket_id UUID REFERENCES legal_tickets(ticket_id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
-        logger.info("🎟️ legal_tickets table verified or created (UUID PK).")
+        logger.info("💬 chat_history table verified or created (UUID FK).")
 
         conn.commit()
 
@@ -238,7 +243,7 @@ async def on_startup():
                 logger.info(f"🧹 Auto cleanup done — {count} stale ticket(s) closed.")
             except Exception as e:
                 logger.error(f"❌ Auto cleanup failed: {e}")
-            await asyncio.sleep(24 * 60 * 60)  # Run daily (24 hours)
+            await asyncio.sleep(24 * 60 * 60)  # Run daily
 
     try:
         first_count = auto_close_stale_tickets(7)

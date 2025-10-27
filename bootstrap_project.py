@@ -17,7 +17,7 @@ structure = {
             "requirements.txt": "# Python deps\n",
             "Dockerfile": "# Backend Dockerfile\n",
             "docker-compose.yml": "# docker-compose file\n",
-            ".env.template": "MONGO_URI=\nPOSTGRES_HOST=\nPOSTGRES_DB=\nPOSTGRES_USER=\nPOSTGRES_PASSWORD=\n",
+            ".env.local.template": "MONGO_URI=\nPOSTGRES_HOST=\nPOSTGRES_DB=\nPOSTGRES_USER=\nPOSTGRES_PASSWORD=\n",
         },
         "web": {
             "package.json": "{\n  \"name\": \"web-app\",\n  \"version\": \"1.0.0\"\n}\n",

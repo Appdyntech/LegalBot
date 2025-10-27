@@ -1,10 +1,10 @@
 # ==============================
-# 🚀 Backend Dockerfile (FastAPI - LegalBot with Cloud SQL Proxy)
+# 🚀 Backend Dockerfile (FastAPI + Cloud SQL Proxy + Auto Env Load)
 # ==============================
 
 FROM python:3.11-slim
 
-# Set working directory inside container
+# Set working directory
 WORKDIR /app
 
 # ------------------------------
@@ -19,39 +19,39 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ------------------------------
 # 📦 Python dependencies
 # ------------------------------
-# Copy requirements separately to leverage Docker layer caching
 COPY legalbot/backend/requirements.txt ./requirements.txt
-
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # ------------------------------
-# 📁 Application source code
+# 📁 Application code
 # ------------------------------
-COPY legalbot/backend /app
+# Copy the full legalbot backend structure
+COPY legalbot /app/legalbot
+
+# Copy environment file for local dev (used in config.py)
+COPY legalbot/backend/.env.local /app/legalbot/.env.local
 
 # ------------------------------
-# 🔐 Install Cloud SQL Auth Proxy
+# 🔐 Cloud SQL Auth Proxy (latest stable v2)
 # ------------------------------
-RUN curl -o /cloud-sql-proxy https://dl.google.com/cloudsql/cloud-sql-proxy.linux.amd64 && \
+RUN curl -fsSL -o /cloud-sql-proxy \
+    https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.10.0/cloud-sql-proxy.linux.amd64 && \
     chmod +x /cloud-sql-proxy
+
+# ------------------------------
+# 🧠 Startup script
+# ------------------------------
+COPY legalbot/backend/start_backend.sh /app/start_backend.sh
+RUN chmod +x /app/start_backend.sh
 
 # ------------------------------
 # ⚙️ Environment setup
 # ------------------------------
-# Render injects environment variables automatically from render.yaml
-# No .env files are copied to keep secrets secure
-
-# ------------------------------
-# 🌐 Expose FastAPI port
-# ------------------------------
+ENV PYTHONPATH=/app
 EXPOSE 8705
 
 # ------------------------------
-# 🧠 Start both Cloud SQL Proxy + FastAPI together
+# 🚀 Entrypoint
 # ------------------------------
-# The Cloud SQL instance connection name should match your actual instance:
-# e.g. legalcbot:asia-south1:legalbot-postgres
-# It runs in the background and listens on localhost:5432
-CMD /cloud-sql-proxy legalcbot:asia-south1:legalbot-postgres --port 5432 & \
-    uvicorn app.main:app --host 0.0.0.0 --port 8705
+ENTRYPOINT ["/app/start_backend.sh"]

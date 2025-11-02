@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "default": "legalcbot",
+    "improving": "legalcbot",
+    "Improving": "legalcbot"
+  },
+  "targets": {},
+  "etags": {}
+}

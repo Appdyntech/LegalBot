@@ -1,6 +1,6 @@
 // web/src/components/ChatBox.tsx
 import React, { useState, useRef, useEffect } from "react";
-import { sendChat } from "../api/chat";
+import { secureFetch } from "../api/secureApi";
 import api from "../api/apiClient";
 
 const API_BASE_URL =
@@ -93,7 +93,10 @@ export default function ChatBox() {
     setMessages((prev) => [...prev, { role: "user", text: question }]);
 
     try {
-      const res = await sendChat(question, sessionId);
+      const res = await secureFetch("chat/ask", {
+        query: question,
+        session_id: sessionId,
+      });
 
       setMessages((prev) => [
         ...prev,
@@ -116,7 +119,7 @@ export default function ChatBox() {
     } finally {
       setLoading(false);
     }
-  };
+  }; // ✅ Added missing closing brace
 
   // 🎙️ Voice input handler
   const handleVoiceInput = () => {

@@ -1,5 +1,6 @@
 // web/src/main.tsx
 import React from "react";
+import "./firebase";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./styles.css";

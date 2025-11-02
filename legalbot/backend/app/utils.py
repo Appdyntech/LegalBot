@@ -7,16 +7,14 @@ from .db_postgres import get_postgres_conn
 
 settings = get_settings()
 
-
 # --------------------------------------------------------------------
-# ✅ Unified PostgreSQL Chat Logger (Production)
+# ✅ Unified PostgreSQL Chat Logger (v2 — legal_chat_history)
 # --------------------------------------------------------------------
 def save_chat_to_postgres(entry: Dict[str, Any]):
     """
-    Insert a chat record into PostgreSQL (table: chat_history).
-    Uses the full production schema with all relevant columns:
-    customer_id, customer_name, feedback, ticket linkage, etc.
+    Save chat messages into legal_chat_history with detailed debug logging.
     """
+    import traceback
     conn = get_postgres_conn()
     if not conn:
         print("[save_chat_to_postgres] ❌ No DB connection — skipping save.")
@@ -24,45 +22,22 @@ def save_chat_to_postgres(entry: Dict[str, Any]):
 
     try:
         cur = conn.cursor()
-
-        # ✅ Ensure schema alignment (only adds missing columns; does not recreate table)
-        cur.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                           WHERE table_name='chat_history' AND column_name='customer_id') THEN
-                ALTER TABLE chat_history ADD COLUMN customer_id UUID;
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                           WHERE table_name='chat_history' AND column_name='customer_name') THEN
-                ALTER TABLE chat_history ADD COLUMN customer_name VARCHAR(150);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                           WHERE table_name='chat_history' AND column_name='feedback_option') THEN
-                ALTER TABLE chat_history ADD COLUMN feedback_option VARCHAR(50);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                           WHERE table_name='chat_history' AND column_name='feedback') THEN
-                ALTER TABLE chat_history ADD COLUMN feedback TEXT;
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                           WHERE table_name='chat_history' AND column_name='issue_category') THEN
-                ALTER TABLE chat_history ADD COLUMN issue_category VARCHAR(150);
-            END IF;
-        END $$;
-        """)
-
-        # ✅ Insert record
         timestamp = entry.get("timestamp") or datetime.datetime.utcnow()
+
+        chat_id = str(entry.get("chat_id"))
+        session_id = entry.get("session_id", "default")
+        user_id = str(entry.get("customer_id")) if entry.get("customer_id") else None
+        ticket_id = str(entry.get("ticket_id")) if entry.get("ticket_id") else None
+
+        print(f"[DEBUG] Inserting chat_id={chat_id} | session={session_id} | user={user_id} | ticket={ticket_id}")
 
         cur.execute(
             """
-            INSERT INTO chat_history (
+            INSERT INTO legal_chat_history (
                 chat_id,
                 session_id,
+                user_id,
                 user_name,
-                customer_id,
-                customer_name,
                 question,
                 answer,
                 confidence,
@@ -70,90 +45,40 @@ def save_chat_to_postgres(entry: Dict[str, Any]):
                 retrieval_mode,
                 knowledge_base,
                 ticket_id,
-                issue_category,
+                query_category,
                 feedback_option,
                 feedback,
-                created_at
+                timestamp
             )
-            VALUES (
-                %(chat_id)s,
-                %(session_id)s,
-                %(user_name)s,
-                %(customer_id)s,
-                %(customer_name)s,
-                %(question)s,
-                %(answer)s,
-                %(confidence)s,
-                %(input_channel)s,
-                %(retrieval_mode)s,
-                %(knowledge_base)s,
-                %(ticket_id)s,
-                %(issue_category)s,
-                %(feedback_option)s,
-                %(feedback)s,
-                %(created_at)s
-            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (chat_id) DO NOTHING;
             """,
-            {
-                "chat_id": entry.get("chat_id"),
-                "session_id": entry.get("session_id", "default"),
-                "user_name": entry.get("user_name", entry.get("customer_name", "Guest")),
-                "customer_id": entry.get("customer_id"),
-                "customer_name": entry.get("customer_name"),
-                "question": entry.get("question"),
-                "answer": entry.get("answer"),
-                "confidence": entry.get("confidence", 0.0),
-                "input_channel": entry.get("input_channel", "web"),
-                "retrieval_mode": entry.get("retrieval_mode", "LLM"),
-                "knowledge_base": entry.get("knowledge_base", "default"),
-                "ticket_id": entry.get("ticket_id"),
-                "issue_category": entry.get("issue_category"),
-                "feedback_option": entry.get("feedback_option"),
-                "feedback": entry.get("feedback"),
-                "created_at": timestamp,
-            },
+            (
+                chat_id,
+                session_id,
+                user_id,
+                entry.get("customer_name", "Guest"),
+                entry.get("question"),
+                entry.get("answer"),
+                entry.get("confidence", 0.0),
+                entry.get("input_channel", "web"),
+                entry.get("retrieval_mode", "LLM"),
+                entry.get("knowledge_base", "default"),
+                ticket_id,
+                entry.get("issue_category", "General"),
+                entry.get("feedback_option"),
+                entry.get("feedback"),
+                timestamp,
+            ),
         )
 
         conn.commit()
-        print(f"[save_chat_to_postgres] ✅ Saved chat {entry.get('chat_id')} to chat_history")
+        print(f"[save_chat_to_postgres] ✅ Successfully saved chat_id={chat_id}")
 
     except Exception as e:
-        print(f"[save_chat_to_postgres] ❌ Error saving chat: {e}")
+        print(f"[save_chat_to_postgres] ❌ Error inserting chat: {e}")
+        traceback.print_exc()
         conn.rollback()
-
-    finally:
-        conn.close()
-
-
-# --------------------------------------------------------------------
-# 🧩 Feedback Updater (robust)
-# --------------------------------------------------------------------
-def update_feedback(chat_id: str, feedback_option: str, feedback_text: str = None):
-    """Update feedback for a chat record."""
-    conn = get_postgres_conn()
-    if not conn:
-        print("[update_feedback] ❌ No DB connection.")
-        return False
-
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            UPDATE chat_history
-            SET feedback_option = %s,
-                feedback = %s
-            WHERE chat_id::text = %s;
-            """,
-            (feedback_option, feedback_text, str(chat_id)),
-        )
-        conn.commit()
-        print(f"[update_feedback] ✅ Feedback updated for chat_id={chat_id}")
-        return True
-    except Exception as e:
-        print(f"[update_feedback] ❌ Error updating feedback: {e}")
-        conn.rollback()
-        return False
     finally:
         conn.close()
 

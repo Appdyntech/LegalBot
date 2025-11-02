@@ -1,6 +1,10 @@
 // web/src/api/chat.ts
-// A small, robust wrapper to call your backend /chat endpoints
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
+// ✅ Unified Chat API with live Firebase token support (final version)
+
+import { getAuth } from "firebase/auth";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8705/api/v1";
 
 /**
  * Types (lightweight)
@@ -24,7 +28,45 @@ export type ChatResponse = {
 };
 
 /**
- * Send a chat query to backend
+ * 🔐 Retrieve Firebase token — live from Auth if signed in, fallback to localStorage
+ */
+async function getFirebaseToken(): Promise<string | null> {
+  try {
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (user) {
+      // Fetch a fresh token (forces refresh if needed)
+      const token = await user.getIdToken(true);
+      console.log("🔑 Firebase token (live):", token.substring(0, 15) + "...");
+      return token;
+    }
+
+    // Fallback: read from localStorage (if rehydrated manually)
+    const userData =
+      JSON.parse(localStorage.getItem("firebaseUser") || "null") ||
+      JSON.parse(localStorage.getItem("authUser") || "null");
+
+    const token =
+      userData?.stsTokenManager?.accessToken ||
+      userData?.idToken ||
+      null;
+
+    if (token) {
+      console.log("🔑 Firebase token (cached):", token.substring(0, 15) + "...");
+      return token;
+    }
+
+    console.warn("⚠️ No Firebase token found.");
+    return null;
+  } catch (e) {
+    console.error("⚠️ Failed to retrieve Firebase token:", e);
+    return null;
+  }
+}
+
+/**
+ * 🚀 Send chat query to backend with Firebase auth
  */
 export async function sendChatQuestion(
   query: string,
@@ -48,12 +90,30 @@ export async function sendChatQuestion(
     user: opts?.user ?? { id: "frontend-user", name: "Guest" },
   };
 
+  const token = await getFirebaseToken();
+
   try {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(payload),
+      credentials: "include", // enable CORS with cookies
     });
+
+    // 🧭 Fallback if unauthenticated
+    if (res.status === 403 || res.status === 401) {
+      console.warn("⚠️ Token rejected — retrying with public /chat/ask/test ...");
+      const fallbackRes = await fetch(`${API_BASE_URL}/chat/ask/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const data = await fallbackRes.json();
+      return { ...data, success: true, from_fallback: true };
+    }
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "<no body>");
@@ -71,7 +131,7 @@ export async function sendChatQuestion(
 }
 
 /**
- * Legacy alias — maintains compatibility
+ * 🕐 Legacy alias for backward compatibility
  */
 export const sendChat = async (payloadOrQuestion: any, maybeSessionId?: string) => {
   if (typeof payloadOrQuestion === "string") {
@@ -94,18 +154,57 @@ export const sendChat = async (payloadOrQuestion: any, maybeSessionId?: string) 
 };
 
 /**
- * Fetch chat history
+ * 📜 Fetch chat history (protected by Firebase token)
  */
 export async function getChatHistory(session_id: string) {
+  const token = await getFirebaseToken();
+  const endpoint = `${API_BASE_URL}/chat/history?session_id=${encodeURIComponent(
+    session_id
+  )}&limit=20`;
+  console.log("📜 GET ->", endpoint);
+
   try {
-    const endpoint = `${API_BASE_URL}/chat/history?session_id=${encodeURIComponent(session_id)}&limit=20`;
-    console.log("📜 GET ->", endpoint);
-    const res = await fetch(endpoint);
+    const res = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include", // ✅ include credentials for CORS
+    });
+
+    // 🧭 Handle token expiration — retry once
+    if (res.status === 401 || res.status === 403) {
+      console.warn("⚠️ Token may be expired — refreshing and retrying...");
+      const freshToken = await getFirebaseToken();
+      if (!freshToken) throw new Error("No valid Firebase token found after refresh.");
+
+      const retry = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${freshToken}`,
+        },
+        credentials: "include",
+      });
+
+      if (!retry.ok) {
+        const txt = await retry.text();
+        console.error("❌ history retry failed:", retry.status, txt);
+        throw new Error(`Failed to load chat history after retry (${retry.status})`);
+      }
+
+      const retryData = await retry.json();
+      console.log("✅ history loaded (after retry):", retryData);
+      return retryData;
+    }
+
     if (!res.ok) {
       const txt = await res.text().catch(() => "<no body>");
       console.error("❌ history error:", res.status, txt);
       throw new Error(`Failed to load chat history (${res.status}): ${txt}`);
     }
+
     const payload = await res.json();
     console.log("✅ history loaded:", payload);
     return payload;

@@ -9,38 +9,59 @@ from .config import get_settings
 
 settings = get_settings()
 
-
 # ----------------------------------------------------
-# Create a reusable connection
+# PostgreSQL Connection Helpers
 # ----------------------------------------------------
 def get_postgres_conn():
-    """Create and return a new PostgreSQL connection."""
+    """Connect to backend Postgres DB (legalbot)."""
     try:
-        # ✅ Safely encode the password (handles @, !, $, etc.)
         safe_password = quote_plus(settings.POSTGRES_PASSWORD)
-
         conn = psycopg2.connect(
             host=settings.POSTGRES_HOST,
             port=settings.POSTGRES_PORT,
             dbname=settings.POSTGRES_DB,
             user=settings.POSTGRES_USER,
-            password=settings.POSTGRES_PASSWORD,  # use original for psycopg2 (not URL string)
+            password=settings.POSTGRES_PASSWORD,
             connect_timeout=5
         )
-
-        print(f"[db_postgres] connected to {settings.POSTGRES_DB} ✅")
+        print(f"[db_postgres] ✅ Connected to backend DB: {settings.POSTGRES_DB}")
         return conn
-
     except Exception as e:
-        print(f"[db_postgres] ❌ Connection error: {e}")
+        print(f"[db_postgres] ❌ Backend DB connection error: {e}")
+        return None
+
+
+def get_rag_conn():
+    """Connect to RAG (document embeddings) DB."""
+    if not hasattr(settings, "RAG_DB_NAME") or not settings.RAG_DB_NAME:
+        print("[db_postgres] ⚠️ RAG_DB_NAME not configured in environment.")
+        return None
+
+    try:
+        conn = psycopg2.connect(
+            host=settings.POSTGRES_HOST,
+            port=settings.POSTGRES_PORT,
+            dbname=settings.RAG_DB_NAME,
+            user=settings.POSTGRES_USER,
+            password=settings.POSTGRES_PASSWORD,
+            connect_timeout=5
+        )
+        print(f"[db_postgres] ✅ Connected to RAG DB: {settings.RAG_DB_NAME}")
+        return conn
+    except Exception as e:
+        print(f"[db_postgres] ❌ RAG DB connection error: {e}")
         return None
 
 
 # ----------------------------------------------------
-# Create chat history table if not exists
+# Initialize Chat Table (only in DEV mode)
 # ----------------------------------------------------
 def init_chat_table():
-    """Ensure the legal_chat_history table exists in Postgres."""
+    """Ensure the legal_chat_history table exists (DEV only)."""
+    if settings.APP_ENV == "prod":
+        print("[db_postgres.init_chat_table] ⚙️ Skipped (APP_ENV=prod).")
+        return
+
     conn = get_postgres_conn()
     if not conn:
         print("[db_postgres.init_chat_table] ❌ Skipped — no DB connection.")
@@ -74,7 +95,7 @@ def init_chat_table():
         """)
         conn.commit()
         cur.close()
-        print("[db_postgres.init_chat_table] ✅ Table legal_chat_history ready.")
+        print("[db_postgres.init_chat_table] ✅ Table legal_chat_history verified.")
     except Exception as e:
         print(f"[db_postgres.init_chat_table] ❌ Error: {e}")
     finally:
@@ -82,10 +103,10 @@ def init_chat_table():
 
 
 # ----------------------------------------------------
-# Save chat / conversation entry
+# Insert Chat Record
 # ----------------------------------------------------
 def insert_chat_record(entry: Dict[str, Any]) -> Optional[str]:
-    """Insert chat/ticket record into Postgres and return UUID."""
+    """Insert a chat/ticket record and return its UUID."""
     conn = get_postgres_conn()
     if not conn:
         print("[db_postgres.insert_chat_record] ❌ No DB connection.")
@@ -93,7 +114,6 @@ def insert_chat_record(entry: Dict[str, Any]) -> Optional[str]:
 
     try:
         cur = conn.cursor()
-
         sql = """
         INSERT INTO legal_chat_history (
             chat_id, session_id, timestamp, user_id, user_phone, user_name,
@@ -110,13 +130,9 @@ def insert_chat_record(entry: Dict[str, Any]) -> Optional[str]:
         RETURNING id;
         """
 
-        # Default values
-        if not entry.get("timestamp"):
-            entry["timestamp"] = datetime.datetime.utcnow().isoformat()
-
-        if not entry.get("ticket_id"):
-            entry["ticket_id"] = None
-
+        # Normalize fields
+        entry["timestamp"] = entry.get("timestamp") or datetime.datetime.utcnow().isoformat()
+        entry["ticket_id"] = entry.get("ticket_id") or None
         if entry.get("sources_json") and isinstance(entry["sources_json"], (list, dict)):
             entry["sources_json"] = json.dumps(entry["sources_json"], ensure_ascii=False)
 
@@ -124,7 +140,7 @@ def insert_chat_record(entry: Dict[str, Any]) -> Optional[str]:
         new_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
-        print(f"[db_postgres.insert_chat_record] ✅ Chat saved to DB (id={new_id})")
+        print(f"[db_postgres.insert_chat_record] ✅ Chat saved (id={new_id})")
         return new_id
     except Exception as e:
         print(f"[db_postgres.insert_chat_record] ❌ Error: {e}")
@@ -135,10 +151,10 @@ def insert_chat_record(entry: Dict[str, Any]) -> Optional[str]:
 
 
 # ----------------------------------------------------
-# Fetch chat history
+# Fetch Chat History
 # ----------------------------------------------------
 def get_chat_history(limit: int = 50):
-    """Fetch the most recent chat records."""
+    """Fetch recent chat records."""
     conn = get_postgres_conn()
     if not conn:
         return []
@@ -160,10 +176,10 @@ def get_chat_history(limit: int = 50):
 
 
 # ----------------------------------------------------
-# 🕒 AUTO CLOSE STALE TICKETS
+# Auto-Close Stale Tickets
 # ----------------------------------------------------
 def auto_close_stale_tickets(days: int = 7):
-    """Mark tickets as closed if older than X days and still open."""
+    """Mark open tickets older than X days as closed."""
     conn = get_postgres_conn()
     if not conn:
         print("[db_postgres.auto_close_stale_tickets] ❌ No DB connection.")
@@ -174,17 +190,19 @@ def auto_close_stale_tickets(days: int = 7):
         cur.execute(
             """
             UPDATE legal_tickets
-            SET status = 'closed', updated_at = NOW(), closure_comment = 'Auto-closed after inactivity'
+            SET status = 'closed',
+                updated_at = NOW(),
+                closure_comment = 'Auto-closed after inactivity'
             WHERE status = 'open'
               AND created_at < NOW() - INTERVAL '%s days'
             RETURNING ticket_id;
             """,
-            (days,),
+            (days,)
         )
         closed = cur.fetchall()
         conn.commit()
         count = len(closed)
-        print(f"[db_postgres.auto_close_stale_tickets] ✅ Closed {count} stale tickets (> {days} days old).")
+        print(f"[db_postgres.auto_close_stale_tickets] ✅ Closed {count} stale tickets (> {days} days).")
         return count
     except Exception as e:
         print(f"[db_postgres.auto_close_stale_tickets] ❌ Error: {e}")
@@ -195,6 +213,9 @@ def auto_close_stale_tickets(days: int = 7):
 
 
 # ----------------------------------------------------
-# Initialization
+# Initialization (safe)
 # ----------------------------------------------------
-init_chat_table()
+if settings.APP_ENV != "prod":
+    init_chat_table()
+else:
+    print("[db_postgres] ⚙️ Skipped chat table init (prod mode).")

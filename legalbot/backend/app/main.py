@@ -1,6 +1,6 @@
 """
 main.py — LegalBOT Backend API Entry Point
-Handles initialization, CORS, routes, and PostgreSQL table setup.
+Handles initialization, CORS, routes, and PostgreSQL setup.
 """
 
 import logging
@@ -8,13 +8,13 @@ import sys
 import os
 import asyncio
 from urllib.parse import quote_plus
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, text
 
 # =====================================================
-# ✅ FIXED IMPORT PATHS FOR NESTED PACKAGE STRUCTURE
+# ✅ FIXED IMPORT PATHS
 # =====================================================
 from legalbot.backend.app.config import get_settings
 from legalbot.backend.app.db_postgres import get_postgres_conn, auto_close_stale_tickets
@@ -28,7 +28,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
-
 settings = get_settings()
 
 # =====================================================
@@ -41,19 +40,7 @@ app = FastAPI(
 )
 
 # =====================================================
-# 🔍 REQUEST LOGGER MIDDLEWARE
-# =====================================================
-class RequestLoggerMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        logger.info(f"➡️ {request.method} {request.url}")
-        response = await call_next(request)
-        logger.info(f"⬅️ {response.status_code} {request.method} {request.url}")
-        return response
-
-app.add_middleware(RequestLoggerMiddleware)
-
-# =====================================================
-# 🌐 CORS CONFIGURATION
+# 🌐 CORS CONFIGURATION (🔥 MUST BE CLEAN)
 # =====================================================
 frontend_origins = [
     "http://localhost:8602",
@@ -62,20 +49,53 @@ frontend_origins = [
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://legalbot-frontend-fajw.onrender.com",  # ✅ Production Frontend
+    "https://legalbot-frontend-fajw.onrender.com",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=frontend_origins,
+    allow_origins=[
+        "http://localhost:8602",
+        "http://127.0.0.1:8602",
+        "https://legalbot-frontend-fajw.onrender.com",  # if deployed frontend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 logger.info(f"✅ CORS enabled for: {', '.join(frontend_origins)}")
 
 # =====================================================
-# 🗄️ DATABASE CONNECTION CHECK (with safe password)
+# 🔍 REQUEST LOGGER (after CORS)
+# =====================================================
+class RequestLoggerMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        logger.info(f"➡️ {request.method} {request.url}")
+        if request.method.upper() == "OPTIONS":
+            logger.info("🟡 Preflight (CORS) request detected — sending 204.")
+        try:
+            response = await call_next(request)
+        except Exception as e:
+            logger.error(f"❌ Exception in request {request.url}: {e}")
+            raise
+        logger.info(f"⬅️ {response.status_code} {request.method} {request.url}")
+        return response
+
+app.add_middleware(RequestLoggerMiddleware)
+
+# =====================================================
+# 🧭 MANUAL CORS PROBE (for debugging OPTIONS)
+# =====================================================
+@app.options("/{full_path:path}")
+async def cors_probe(request: Request):
+    """Handles any OPTIONS request explicitly for debugging."""
+    origin = request.headers.get("origin", "unknown")
+    logger.info(f"🧩 OPTIONS preflight received from: {origin} for {request.url.path}")
+    return Response(status_code=204)
+
+# =====================================================
+# 🗄️ DATABASE CONNECTION SETUP
 # =====================================================
 try:
     conn = get_postgres_conn()
@@ -88,18 +108,15 @@ except Exception as e:
 # =====================================================
 # 🧩 DATABASE SCHEMA VALIDATION / CREATION (DEV ONLY)
 # =====================================================
-# Safely encode password in case it contains special characters like '@'
 safe_password = quote_plus(settings.POSTGRES_PASSWORD)
-
 DATABASE_URL = (
     f"postgresql+psycopg2://{settings.POSTGRES_USER}:{safe_password}"
     f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
 )
-
 engine = create_engine(DATABASE_URL, echo=False)
 
 def ensure_table_schema():
-    """Ensures all required tables and columns exist in the database."""
+    """Creates or verifies essential tables (dev mode only)."""
     with engine.connect() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS legal_tickets (
@@ -114,8 +131,6 @@ def ensure_table_schema():
                 closure_comment TEXT
             );
         """))
-        logger.info("🎟️ legal_tickets table verified or created (UUID PK).")
-
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS customers (
                 id SERIAL PRIMARY KEY,
@@ -132,21 +147,6 @@ def ensure_table_schema():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
-        logger.info("👥 customers table verified or created.")
-
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS lawyers (
-                lawyer_id SERIAL PRIMARY KEY,
-                name VARCHAR(150),
-                email VARCHAR(150) UNIQUE,
-                specialization VARCHAR(255),
-                experience_years INT,
-                rating NUMERIC,
-                joined_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        logger.info("⚖️ lawyers table verified or created.")
-
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS chat_history (
                 chat_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -166,17 +166,11 @@ def ensure_table_schema():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
-        logger.info("💬 chat_history table verified or created (UUID FK).")
-
         conn.commit()
+        logger.info("✅ Schema verified or created.")
 
-# 🚫 Skip schema verification in production
 if os.getenv("APP_ENV") != "prod":
-    try:
-        ensure_table_schema()
-        logger.info("✅ All key database tables verified successfully.")
-    except Exception as e:
-        logger.error(f"❌ Schema verification failed: {e}")
+    ensure_table_schema()
 else:
     logger.info("⚙️ Skipping schema verification in PROD mode.")
 
@@ -193,8 +187,10 @@ from legalbot.backend.app.routes import (
     notifications,
     payments,
     health,
+    history_routes,
 )
 
+# ✅ Register all routers
 app.include_router(google_auth_router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(customer.router, prefix="/api/v1/customers", tags=["Customers"])
 app.include_router(lawyers.router, prefix="/api/v1/lawyers", tags=["Lawyers"])
@@ -204,13 +200,13 @@ app.include_router(documents.router, prefix="/api/v1/documents", tags=["Document
 app.include_router(notifications.router, prefix="/api/v1/notify", tags=["Notifications"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"])
 app.include_router(health.router, prefix="/api/v1/health", tags=["System Health"])
+app.include_router(history_routes.router, prefix="/api/v1/history", tags=["History"])
 
 # =====================================================
 # 🏁 ROOT ENDPOINT
 # =====================================================
 @app.get("/")
 async def root():
-    """Root API entrypoint."""
     return {
         "service": "LegalBOT Backend API",
         "version": "3.6",
@@ -227,15 +223,19 @@ async def on_startup():
     routes_dir = os.path.join(os.path.dirname(__file__), "routes")
     if os.path.exists(routes_dir):
         logger.info(f"📁 ROUTES DIRECTORY: {', '.join(os.listdir(routes_dir))}")
-    else:
-        logger.warning("⚠️ Routes directory not found!")
 
     logger.info("🚀 LegalBOT backend initialized successfully.")
     logger.info("✅ Endpoints loaded:")
     for route in app.routes:
         logger.info(f" - {route.path} -> {route.methods}")
 
-    # 🕒 Auto-close stale tickets (7 days old)
+    # 🧹 Run initial cleanup and schedule daily maintenance
+    try:
+        first_count = auto_close_stale_tickets(7)
+        logger.info(f"🧹 Initial cleanup executed — {first_count} ticket(s) closed.")
+    except Exception as e:
+        logger.error(f"❌ Initial cleanup failed: {e}")
+
     async def cleanup_loop():
         while True:
             try:
@@ -243,12 +243,6 @@ async def on_startup():
                 logger.info(f"🧹 Auto cleanup done — {count} stale ticket(s) closed.")
             except Exception as e:
                 logger.error(f"❌ Auto cleanup failed: {e}")
-            await asyncio.sleep(24 * 60 * 60)  # Run daily
-
-    try:
-        first_count = auto_close_stale_tickets(7)
-        logger.info(f"🧹 Initial cleanup executed — {first_count} ticket(s) closed.")
-    except Exception as e:
-        logger.error(f"❌ Initial cleanup failed: {e}")
+            await asyncio.sleep(24 * 60 * 60)
 
     asyncio.create_task(cleanup_loop())
